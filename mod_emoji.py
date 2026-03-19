@@ -136,7 +136,7 @@ def desc(p: Param):
     cols, rows = chrmap(cp_img, font, PAGE_FONT, cp, bg='#c8c8c8')
 
     wn = sg.Window('Select Emoji', layout=[[sg.Column(left), sg.Column(right)]],
-                   grab_anywhere=True, padding_x=0, padding_y=0)
+                   grab_anywhere=True, padding_x=0, padding_y=0, modal=True)
     
     for i in range(4):
         if codes[i] is None:

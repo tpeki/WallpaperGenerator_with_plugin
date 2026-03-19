@@ -136,17 +136,20 @@ INTERNAL_SET = {
 class SpriteSet:
     def __init__(self):
         self.name=''
+        self.desc=''
         self.sprites = {}
         self.enabled = []
        
     def load_internal(self):
         self.sprites = copy.deepcopy(INTERNAL_SET)
         self.name = INT_LABEL
+        self.desc = 'Internal Set'
         self.enabled = list(INTERNAL_SET.keys())
 
-    def set_pattern(self, name, patterndic):
+    def set_pattern(self, name, patterndic, desc=''):
         self.sprites = patterndic
         self.name = name
+        self.desc = desc if desc is not None else ''
         self.enabled = list(patterndic.keys())
 
     def list(self):
@@ -254,6 +257,7 @@ def strtotuple(s: str):
 
     return retv
 
+
 def load_spr(file:str):
     '''テキストファイルからSPR形式のデータを読み込んでスプライトデータに'''
     file = sanitize_filename(file)
@@ -273,11 +277,14 @@ def load_spr(file:str):
     # print(f'FILE = {file}')
 
     spr_name = None
+    spr_desc = None
     ptn = []
     w,h = None, None
-   
+
     for line in source:
         if len(line) == 0 or line[0] == '#':  # 空行、コメント行は飛ばす
+            if spr_desc is None and len(line) > 2:
+                spr_desc = line[1:].strip()
             continue
        
         if line[0] == '[':  # 最初は [スプライト名]
@@ -317,7 +324,7 @@ def load_spr(file:str):
     if len(ptn) > 1 and spr_name is not None:
         pdic[spr_name] = ptn
 
-    return pdic    
+    return pdic, spr_desc
 
 
 # -----
@@ -606,6 +613,11 @@ def create_spr():
             nname = wn['-name-'].get()
             if nname !='' and \
                nname not in sprite_preserv.list():
+                pcol = palette_extract(img)
+                trans = to_rgb(wn['-tcol-'].get())
+                if trans not in pcol:
+                    palette_draw(palette, trans=None)
+                    continue
                 pattern = conv_spr(img, rgb_string(trans))
                 # print(nname,' Pattern:', pattern[3])
                 pat = []
@@ -625,7 +637,8 @@ def create_spr():
                 check_transparent(wn, pcols, trans)
             continue                
         elif ev == '-import-':
-            fname = get_openfile('', filetypes=[('Bitmap','.png;.jpg;.bmp;.gif;.ico'),
+            ftypes = '*.png;*.jpg;*.gif;*.ico'
+            fname = get_openfile('', filetypes=[('Bitmap',ftypes),
                                            ('any', '.*')])
             if fname is not None and fname != '':
                 img = Image.open(fname)
@@ -912,6 +925,7 @@ def desc(p: Param):
            sg.Button('Load',key='-fread-', background_color='#ddddff'),
            sg.Text('', expand_x=True),
            sg.Text(f'x{mag}',key='-mag-')],
+          [sg.Text(sprite_preserv.desc, key='-sdesc-')],
           [sg.Image(data=preview_image, key='-prvw-',
                     size=preview_image.size)],
           [sg.Button('Pick Items', key='-sel-'),
@@ -930,17 +944,22 @@ def desc(p: Param):
         ev,va = wn.read()
 
         if ev == sg.WINDOW_CLOSED or ev == '-ok-':
-            break
+            if len(sprite_preserv.sprites) > 0:
+                break
+            continue
         elif ev == '-fread-':
             fname = wn['-set-'].get()
-            if INT_LABEL == fname:
+            if fname == '':
+                continue
+            elif INT_LABEL == fname:
                 sprite_preserv.load_internal()
             else:
-                pdic = load_spr(fname)
+                pdic, sdesc = load_spr(fname)
                 if len(pdic) == 0:
                     sprite_preserv.load_internal()
                 else:
-                    sprite_preserv.set_pattern(fname, pdic)
+                    sprite_preserv.set_pattern(fname, pdic, desc=sdesc)
+            wn['-sdesc-'].update(sprite_preserv.desc)
             files = sprfile_list()
             wn['-set-'].update(values=files)
             wn.refresh()
@@ -949,11 +968,28 @@ def desc(p: Param):
             create_spr()
             wn.un_hide()
         elif ev == '-del-':
+            if len(sprite_preserv.sprites) == 0:
+                continue
             last_key = next(reversed(sprite_preserv.sprites))
-            ans = sg.ask_ok_cancel(f'Delete {last_key}?', title='Purge Item')
+            with sg.Window('Purge Item',
+                           layout=[[sg.Text(f'Delete {last_key}?')],
+                                   [sg.Button('Cancel', key='-dcan-'),
+                                    sg.Button('Sure', key='-dok-',
+                                              background_color='#ddffdd')]],
+                           modal=True) as dialog:
+                for ev,va in dialog.event_iter():
+                    if ev == '-dok-':
+                        ans = True
+                        break
+                    elif ev == sg.WINDOW_CLOSED or ev == '-dcan-':
+                        ans = False
+                        break
+
+            #ans = sg.ask_ok_cancel(f'Delete {last_key}?', title='Purge Item')
             if ans:
-                sprite_preserv.sprites.popitem()
-                sprite_preserv.enabled.remove(last_key)
+                if len(sprite_preserv.sprites) > 0:
+                    sprite_preserv.sprites.popitem()
+                    sprite_preserv.enabled.remove(last_key)
         elif ev == '-dmp-':
             outdir = sprite_preserv.name
             ans = sg.ask_ok_cancel(f'Dump selected images to {outdir}/*.png',
@@ -961,8 +997,12 @@ def desc(p: Param):
             if ans:
                 dump_sprites(outdir)
         elif ev == '-sav-':
-            file = get_savefile(sprite_preserv.name+'.spr',
-                                [('Sprite', '.spr'),])
+            if len(sprite_preserv.sprites) == 0:
+                continue
+            fname = sprite_preserv.name
+            if fname == INT_LABEL or fname == '':
+                fname = 'temp'
+            file = get_savefile(fname+'.spr', [('Sprite', '.spr'),])
             if file is not None and file != '':
                 save_spr(file)
         elif ev == '-sel-':
@@ -1010,14 +1050,15 @@ def simple_frontend():
                 break
         elif ev == '-prvw-':
             wn.hide()
-            if INT_LABEL == va['-list-'][0]:
+            setname = va['-list-'][0]
+            if INT_LABEL == setname:
                 sprite_preserv.load_internal()
             else:
-                pdic = load_spr(va['-list-'][0])
+                pdic, sdesc = load_spr(setname)
                 if len(pdic) == 0:
                     sprite_preserv.load_internal()
                 else:
-                    sprite_preserv.set_pattern(va['-list-'][0], pdic)
+                    sprite_preserv.set_pattern(setname, pdic, desc=sdesc)
             desc()
             wn.un_hide()
             files = sprfile_list()
@@ -1255,14 +1296,10 @@ def generate(p: Param):
         theta=random.random()*360
 
         pat=sprite_pattern(ps)
-        simg=sprite_image(pat)
+        simg=sprite_image(pat).resize((int(sw*pat_size),int(sh*pat_size)),
+                                      resample=Image.NEAREST)
 
-        simg=simg.resize(
-            (int(sw*pat_size),int(sh*pat_size)),
-            resample=Image.BICUBIC
-        )
-
-        p1=simg.rotate(theta,expand=True)
+        p1=simg.rotate(theta,expand=True, resample=Image.NEAREST)
 
         p1w,p1h=p1.size
 
