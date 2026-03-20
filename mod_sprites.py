@@ -75,60 +75,60 @@ def default_param(p: Param):
 
 INT_LABEL = '--internal--'
 INTERNAL_SET = {
-    'pacman':[
+    'rhkd':[
         (16,16),
-        [0, '#000000'],
-        [0x07c0, '#ffff00'],
-        [0x1fc0, '#ffff00'],
-        [0x3f80, '#ffff00'],
-        [0x3f00, '#ffff00'],
-        [0x7e00, '#ffff00'],
-        [0x7c00, '#ffff00'],
-        [[0x7800, 0x0006],['#ffff00', '#ffb8ae']],
-        [[0x7c00, 0x0006],['#ffff00', '#ffb8ae']],
-        [0x7e00, '#ffff00'],
-        [0x3f00, '#ffff00'],
-        [0x3f80, '#ffff00'],
-        [0x1fc0, '#ffff00'],
-        [0x07c0, '#ffff00'],
-        [0, '#000000'],
-        [0, '#000000'],
+        [0x18,'#A9792C'], [0xfcb,'#A9792C'],
+        [0x1ffc,'#A9792C'], [0x3ff8,'#A9792C'],
+        [[0x79fc,0x600],['#A9792C','#FBE488']],
+        [[0x783c,0x7c0],['#A9792C','#FBE488']],
+        [[0x601c,0x1760],['#A9792C','#FBE488']],
+        [[0x1760,0x18],['#FBE488','#A9792C']],
+        [[0x2220,0x1dc0,0x18],['#049EF0','#FBE488','#A9792C']],
+        [[0x1dc0,0x220,0x18],['#049EF0','#FBE488','#A9792C']],
+        [[0xa03d,0x1fc0],['#A9792C','#FBE488']],
+        [[0xf00f,0xdc0,0x200],['#A9792C','#FBE488','#ED0E57']],
+        [[0x6006,0x780],['#A9792C','#FBE488']],
+        [[0x480,0x300],['#8BF7ED','#FBE488']],
+        [[0x16c0,0x920],['#FFFFFF','#8BF7ED']],
+        [[0x2940,0x16b0],['#8BF7ED','#FFFFFF']],
         ],
-    'akabee':[
+    'afu':[
         (16,16),
-        [0, '#000000'],
-        [0x03c0, '#ff0000'],
-        [0x0ff0, '#ff0000'],
-        [0x1ff8, '#ff0000'],
-        [[0x39e4, 0x0618],['#ff0000', '#ffffff']],
-        [[0x30c0, 0x0f3c],['#ff0000', '#ffffff']],
-        [[0x30c0, 0x0c30, 0x030c],['#ff0000', '#ffffff', '#2121ff']],
-        [[0x70c2, 0x0c30, 0x030c],['#ff0000', '#ffffff', '#2121ff']],
-        [[0x79e6, 0x0618],['#ff0000', '#ffffff']],
-        [0x7ffe, '#ff0000'],
-        [None, 'rep3'],
-        [0x7bde, '#ff0000'],
-        [0x318c, '#ff0000'],
-        [0, '#000000'],
+        [0x780,'#F3EF2A'], [0xc00,'#F3EF2A'], [0x6f0,'#F3EF2A'],
+        [0x1ff8,'#F3EF2A'], [0x1ffc,'#F3EF2A'],
+        [[0x1dfc,0x200],['#F3EF2A','#FDF1C0']],
+        [[0x87c,0x780],['#F3EF2A','#FDF1C0']],
+        [[0x6c0,0x100,0x3c],['#FDF1C0','#4B5108','#F3EF2A']],
+        [[0xf40,0x80,0x3e],['#FDF1C0','#13A7BC','#F3EF2A']],
+        [[0x1bc0,0x400,0x3c],['#FDF1C0','#FBC4C2','#F3EF2A']],
+        [[0x1bc0,0x400,0x3d],['#FDF1C0','#FBC4C2','#F3EF2A']],
+        [[0x6fc0,0x3e],['#FDF1C0','#F3EF2A']],
+        [[0x6180,0x7e],['#FDF1C0','#F3EF2A']],
+        [[0x6000,0x740,0x80,0x3c],['#FDF1C0','#7AF527','#4EB808','#F3EF2A']],
+        [[0x6ff0,0xe],['#7AF527','#F3EF2A']],
+        [[0x77f0,0x800,0xd],['#7AF527','#4EB808','#F3EF2A']],
         ],
-    'cherry':[
+    'azssn':[
         (16,16),
-        [0, '#000000'],
-        [0, '#000000'],
-        [0x000c, '#de9751'],
-        [0x003c, '#de9751'],
-        [0x00d0, '#de9751'],
-        [0x0110, '#de9751'],
-        [[0x1c00, 0x0220], ['#ff0000', '#de9751']],
-        [[0x3b00, 0x0440], ['#ff0000', '#de9751']],
-        [[0x3eb0, 0x0040], ['#ff0000', '#de9751']],
-        [[0x2db8, 0x1000, 0x0040], ['#ff0000', '#ffffff', '#de9751']],
-        [[0x35f8, 0x0800], ['#ff0000', '#ffffff']],
-        [[0x1d78, 0x0080], ['#ff0000', '#ffffff']],
-        [[0x01b8, 0x0040], ['#ff0000', '#ffffff']],
-        [0x00f0, '#ff0000'],
-        [0, '#000000'],
-        [0, '#000000'],
+        [[0x1800,0x600],['#240CE2','#210BD0']],
+        [[0x6e0,0x100],['#7161F6','#3A23F3']],
+        [[0x1978,0x680],['#7161F6','#3A23F3']],
+        [[0x101c,0xaa0,0x440,0x100],
+         ['#7161F6','#3A23F3','#1D0AB9','#FDF1C0']],
+        [[0x381c,0x7e0],['#7161F6','#FDF1C0']],
+        [[0x381e,0x7e0],['#7161F6','#FDF1C0']],
+        [[0x301e,0xba0],['#7161F6','#FDF1C0']],
+        [[0x300e,0xbb0],['#7161F6','#FDF1C0']],
+        [[0x3004,0xff0,0xa],['#4263F6','#FDF1C0','#7161F6']],
+        [[0x1004,0xfd0,0x20,8],['#4263F6','#FDF1C0','#FCCFC7','#7161F6']],
+        [[0x1000,0xce0,0x300,0x10,0xc],
+         ['#4263F6','#FDF1C0','#F791EA','#7161F6','#0B34EC']],
+        [[0x180c,0x7c0,0x30],['#0B34EC','#FDF1C0','#0928B4']],
+        [[0x180e,0x670,0x180],['#0B34EC','#0928B4','#FDF1C0']],
+        [[0x180e,0x430,0x2c0,0x100],
+         ['#0B34EC','#0928B4','#8F29AF','#FDF1C0']],
+        [[0x1006,0x818,0x7e0],['#0B34EC','#FDF1C0','#8F29AF']],
+        [[0x100c,0xff0,2],['#FDF1C0','#8F29AF','#0B34EC']],
         ],
     }        
 
@@ -912,6 +912,22 @@ def sprfile_list(directory=DATA_DIR):
     return files
 
 
+def dialog(title,msg,btntxt):
+    with sg.Window(title,
+               layout=[[sg.Text(msg)],
+                       [sg.Button('Cancel', key='-dcan-'),
+                        sg.Button(btntxt, key='-dok-',
+                                  background_color='#ddffdd')]],
+               modal=True) as dialog:
+        for ev,va in dialog.event_iter():
+            if ev == '-dok-':
+                ans = True
+                break
+            elif ev == sg.WINDOW_CLOSED or ev == '-dcan-':
+                ans = False
+                break
+    return ans
+
 def desc(p: Param):
     ''' 利用スプライトセットの選択、追加など
         (プラグイン時の設定画面)'''
@@ -971,29 +987,15 @@ def desc(p: Param):
             if len(sprite_preserv.sprites) == 0:
                 continue
             last_key = next(reversed(sprite_preserv.sprites))
-            with sg.Window('Purge Item',
-                           layout=[[sg.Text(f'Delete {last_key}?')],
-                                   [sg.Button('Cancel', key='-dcan-'),
-                                    sg.Button('Sure', key='-dok-',
-                                              background_color='#ddffdd')]],
-                           modal=True) as dialog:
-                for ev,va in dialog.event_iter():
-                    if ev == '-dok-':
-                        ans = True
-                        break
-                    elif ev == sg.WINDOW_CLOSED or ev == '-dcan-':
-                        ans = False
-                        break
+            ans = dialog('Purge Item', f'Delete {last_key}?', 'Sure')
 
-            #ans = sg.ask_ok_cancel(f'Delete {last_key}?', title='Purge Item')
             if ans:
                 if len(sprite_preserv.sprites) > 0:
                     sprite_preserv.sprites.popitem()
                     sprite_preserv.enabled.remove(last_key)
         elif ev == '-dmp-':
-            outdir = sprite_preserv.name
-            ans = sg.ask_ok_cancel(f'Dump selected images to {outdir}/*.png',
-                                   title='Dump Sprites')
+            outdir = DATA_DIR+pa.sep+sprite_preserv.name
+            ans = dialog('Dump Item', f'Dump image to {outdir}', 'Dump')
             if ans:
                 dump_sprites(outdir)
         elif ev == '-sav-':
