@@ -1,6 +1,6 @@
 import re
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, UnidentifiedImageError
 import random
 import math
 import copy
@@ -345,29 +345,77 @@ def dtos(data):
     else:
         return f'0x{data:x}'
 
+
 def compress(buf):
-    if len(buf) < 2:
-        return buf
+    n = len(buf)
 
-    out = [buf[0]]
-    last = buf[0]
-    rep = 0
-    for line in buf[1:]:
-        if line == last:
-            rep += 1
-        else:
-            if rep > 0:
-                out.append(f',rep{rep}')
-                rep = 0
-            out.append(line)
-            last = line
+    dp = [float('inf')] * (n+1)
+    choice = [None] * (n+1)
 
-    if rep > 0:
-        out.append(f',rep{rep}')
+    dp[n] = 0
+
+    def cost_line(x):
+        return len(x)
+
+    def cost_rep(k):
+        return len(f',rep{k-1}')
+
+    def cost_turn():
+        return len(',turnover')
+
+    for i in range(n-1, -1, -1):
+
+        # --- 1. 単行 ---
+        c = cost_line(buf[i]) + dp[i+1]
+        if c < dp[i]:
+            dp[i] = c
+            choice[i] = ('line', 1)
+
+        # --- 2. rep ---
+        j = i+1
+        while j < n and buf[j] == buf[i]:
+            k = j - i + 1
+            c = cost_line(buf[i]) + cost_rep(k) + dp[i+k]
+            if c < dp[i]:
+                dp[i] = c
+                choice[i] = ('rep', k)
+            j += 1
+
+        # --- 3. turnover ---
+        for k in range(1, (n-i)//2 + 1):
+            head = buf[i:i+k]
+            tail = buf[i+k:i+2*k]
+
+            if head == tail[::-1]:
+                c = sum(cost_line(x) for x in head) + cost_turn() + dp[i+2*k]
+                if c < dp[i]:
+                    dp[i] = c
+                    choice[i] = ('turn', k)
+
+    # --- 復元 ---
+    out = []
+    i = 0
+
+    while i < n:
+        typ, k = choice[i]
+
+        if typ == 'line':
+            out.append(buf[i])
+            i += 1
+
+        elif typ == 'rep':
+            out.append(buf[i])
+            out.append(f',rep{k-1}')
+            i += k
+
+        elif typ == 'turn':
+            out.extend(buf[i:i+k])
+            out.append(',turnover')
+            i += 2*k
 
     return out
-   
-   
+
+
 def save_spr(file:str):
     file = sanitize_filename(file)
     file = pa.splitext(file)[0]+'.spr'
@@ -550,8 +598,27 @@ def palette_img(img, trans=None):
     
 
 # プレビュー画面生成
+PREVIEW_SIZE=(272,240)
+
+def xy_keep_aspect(img):
+    w,h = img.size
+    aspr = PREVIEW_SIZE[0]/PREVIEW_SIZE[1]
+    if h*aspr > w:
+        y = PREVIEW_SIZE[1]
+        x = int(y*w/h)
+    else:
+        x = PREVIEW_SIZE[0]
+        y = int(x*h/w)
+
+    print(w,h,x,y)
+    return x, y
+        
+
+
 def update_preview(wn, img, cpr, trans):
     rimg = reduce_cpr(img, cpr)
+    x,y = xy_keep_aspect(img)
+    rimg = rimg.resize((x,y), resample=Image.NEAREST)
     wn['-prvw-'].update(data=rimg)
     
     palette = palette_extract(rimg)
@@ -572,7 +639,7 @@ def check_transparent(wn, palette, trans):
 
 def create_spr():
     global sprite_preserv
-    sidebar = [[sg.Text('SPRITE SET '),
+    colormenu = [[sg.Text('SPRITE SET '),
                 sg.Text(sprite_preserv.name,
                         size=(20,1),key='-setname-')],
                [sg.Text('ID'),
@@ -584,13 +651,20 @@ def create_spr():
                [sg.Image(size=(164,44), key='-tcpal-', enable_events=True)],
                ]
 
-    lo = [[sg.Image(size=(272,240),key='-prvw-'),
-           sg.Frame('', layout=sidebar, relief='groove',
+    column_lo = [[sg.Frame('', layout=colormenu, relief='groove',
                     vertical_alignment='top')],
-          [sg.Text('',size=(20,1), key='-fname-'),
-           sg.Button('Read File', key='-import-'),
-           sg.Button('Reduce Color', key='-redc-'),
-           sg.Text('',expand_x=True),
+                 [sg.Text(expand_y=True)],
+                 [sg.Text('File:'),
+                  sg.Text('',size=(0,1), key='-fname-')],
+                 [sg.Button('Read File', key='-import-',
+                            background_color='#ffffdd'),
+                  sg.Button('Reduce Color', key='-redc-'),
+                 ]]
+           
+    lo = [[sg.Image(size=PREVIEW_SIZE,key='-prvw-'),
+           sg.Column(layout=column_lo, expand_y=True)],
+          [sg.Button('BulkRead', key='-blk-', background_color='#ddffff'),
+           sg.Text(expand_x=True),
            sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
            sg.Button('Register', key='-ok-', background_color='#ddffdd'),
            ]]
@@ -636,6 +710,12 @@ def create_spr():
                 rimg, pcols = update_preview(wn, img, cpr, trans)
                 check_transparent(wn, pcols, trans)
             continue                
+        elif ev == '-blk-':
+            wn.hide()
+            num = bulk_import()
+            wn.un_hide()
+            if num > 0:
+                break
         elif ev == '-import-':
             ftypes = '*.png;*.jpg;*.gif;*.ico'
             fname = get_openfile('', filetypes=[('Bitmap',ftypes),
@@ -643,7 +723,7 @@ def create_spr():
             if fname is not None and fname != '':
                 img = Image.open(fname)
                 w,h = [min(64,_) for _ in img.size]  # 最大64ドット四方に制限
-                img = img.resize((w,h))  # crop((0,0,w,h)) resizeかcropか
+                img = img.resize((w,h), resample=Image.NEAREST)
                 img = img.quantize(colors=16).convert('RGB')
                 wn['-fname-'].update(pa.splitext(pa.split(fname)[1])[0])
                 cpr = to_int(wn['-cpr-'].get())
@@ -670,6 +750,70 @@ def create_spr():
     wn.close()
     return
 
+def bulk_import():
+    lo = [[sg.Text('Import folder:'),
+           sg.Input(key='-folder-', size=(0,1)),
+           sg.FolderBrowse(key='-fsel-', target_key='-folder-',
+                           default_path=DATA_DIR)],
+          [sg.Text('Transparent Color:'),
+           sg.Input('#000000', key='-trns-', size=(10,1)),
+           sg.Text(expand_x=True),
+           sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
+           sg.Button('Register', key='-ok-', background_color='#ddffdd'),
+           ],
+          ]
+    wn = sg.Window('Bulk read', layout=lo)
+
+    while True:
+        ev, va = wn.read()
+        if ev == sg.WINDOW_CLOSED or ev == '-can-':
+            wn.close()
+            return 0
+        elif ev == '-ok-':
+            foldername = va['-folder-']
+            trans = va['-trns-']
+            if pa.isdir(foldername) == True:
+                break
+        
+        print(ev, va)
+
+    wn.close()
+
+    setname = pa.basename(foldername)
+    fnames = glob.glob(foldername+pa.sep+'*.*')
+
+    print( f'folder={foldername}\ntrans={trans}')
+    cnt = 0
+    pdic = {}
+    for file in fnames:
+        nname = pa.splitext(pa.split(file)[1])[0]
+        p = read_and_conv(file, trans)
+        if p is not None:
+            print(nname, end=' ')
+            pdic[nname] = p
+    if len(pdic) >= 1:
+        sprite_preserv.set_pattern(setname, pdic, desc=foldername)
+        print(f'\n{setname} includes {len(pdic)} pattern(s)')
+
+    return len(pdic)
+
+
+def read_and_conv(file, trans):
+    try:
+        img = Image.open(file)
+    except UnidentifiedImageError:
+        return None
+    w,h = [min(64,_) for _ in img.size]  # 最大64ドット四方に制限
+    img = img.resize((w,h),resample=Image.NEAREST)
+    img = img.convert('RGB')
+    pattern = conv_spr(img, trans)
+    pat = []
+    for itm in pattern:
+        dat = strtotuple(itm)
+        pat.append(dat)
+
+    return pat
+
 
 # -----
 # スプライトパターン操作
@@ -687,6 +831,7 @@ def and_pat(orig, pat, n):
         if pat[i] != '0':
             ol[i] = c
     return ''.join(ol)
+
 
 def sprite_pattern(name:str):
     if name not in sprite_preserv.sprites:
@@ -709,9 +854,8 @@ def sprite_pattern(name:str):
             if 'turnover' in cmd:
                 q = len(spr)
                 for i in range(q):
-                    #print(q,i, spr)
                     spr.append(spr[q-i-1])
-                break
+                continue  # break
 
             if 'rep' in cmd:
                 if not spr:
