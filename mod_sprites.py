@@ -25,6 +25,7 @@ WIDTH = 1920
 HEIGHT = 1080
 MAX_SIZE = (64,64)
 DATA_DIR = 'samples'
+ZIPFILE = 'sprites.zip'
 AA=2
 
 # module基本情報
@@ -174,32 +175,6 @@ sprite_preserv = SpriteSet()
 # -----
 DIGIT_RE = re.compile(r'\d+')
 
-# ファイル名サニタイズ
-RESERVED_NAMES = {
-    "CON", "PRN", "AUX", "NUL",
-    *(f"COM{i}" for i in range(1, 10)),
-    *(f"LPT{i}" for i in range(1, 10)),
-}
-
-def sanitize_filename(name):
-    name = name.strip()
-    path, basename = pa.split(name)
-    base, ext = pa.splitext(basename)
-
-    base = re.sub(r'[\\/:*?"<>|]', '', base)
-    if base.upper() in RESERVED_NAMES:
-        base = f"{base}_"
-
-    return path+pa.sep+base+ext
-
-def sanitize_dirname(name):
-    drv, path = pa.splitdrive(name)
-    p = path.split('\\')
-    path = '\\'.join([x+'_' if x.upper() in RESERVED_NAMES else x for x in p])
-
-    return drv+path
-
-
 # 文字列 -> 数値変換 (16進考慮)
 def to_int(s):
     try:
@@ -260,21 +235,16 @@ def strtotuple(s: str):
 
 def load_spr(file:str):
     '''テキストファイルからSPR形式のデータを読み込んでスプライトデータに'''
-    file = sanitize_filename(file)
+    file = sanitize_filename(file, ext='.spr')
+    path, base = pa.split(file)
     pdic = {}
-    if not pa.exists(file):
-        dirname, basename = pa.split(file)
-        base, ext = pa.splitext(basename)
-        if pa.exists(dirname+base+'.spr'):
-            file = dirname+base+'.spr'
-        elif pa.exists(DATA_DIR+pa.sep+base+'.spr'):
-            file = DATA_DIR+pa.sep+base+'.spr'
-        else:
-            return pdic
 
-    with open(file, mode='r', encoding='sjis') as f:
-        source = f.read().splitlines()
-    # print(f'FILE = {file}')
+    # print(f'path {path}  // base {base}')
+    source = read_filez(file, add_zip=ZIPFILE)
+    if source is None and path == '':
+        source = read_filez(DATA_DIR+pa.sep+file, add_zip=ZIPFILE)
+        if source is None:
+            return [], ''
 
     spr_name = None
     spr_desc = None
@@ -417,9 +387,8 @@ def compress(buf):
 
 
 def save_spr(file:str):
-    file = sanitize_filename(file)
-    file = pa.splitext(file)[0]+'.spr'
-    set_name = pa.splitext(pa.split(file)[1])[0]
+    file = sanitize_filename(file, force_ext='.spr')
+    set_name = pa.splitext(pa.basename(file))[0]
     sprite_preserv.name = set_name
     pdic = {}
     for key in sprite_preserv.enabled:
@@ -720,8 +689,9 @@ def create_spr():
             ftypes = '*.png;*.jpg;*.gif;*.ico'
             fname = get_openfile('', filetypes=[('Bitmap',ftypes),
                                            ('any', '.*')])
+            frush_ev(wn)
             if fname is not None and fname != '':
-                img = Image.open(fname)
+                img = Image.open(sanitize_filename(fname))
                 w,h = [min(64,_) for _ in img.size]  # 最大64ドット四方に制限
                 img = img.resize((w,h), resample=Image.NEAREST)
                 img = img.quantize(colors=16).convert('RGB')
@@ -799,6 +769,8 @@ def bulk_import():
 
 
 def read_and_conv(file, trans):
+    if file is not None and file != '':
+        file=sanitize_filename(file)
     try:
         img = Image.open(file)
     except UnidentifiedImageError:
@@ -1050,27 +1022,12 @@ def sprite_preview():
 # -----
 def sprfile_list(directory=DATA_DIR):
     '''スプライトデータファイルの取得'''
-    files = [pa.splitext(pa.split(fn)[1])[0] \
-             for fn in glob.glob(directory+pa.sep+'*.spr')]
+    patn = directory+pa.sep+'*.spr'
+    files = [fn.replace('.spr','') \
+             for fn in glob_filelistz(patn, add_zip=ZIPFILE)]
     files.append(INT_LABEL)
     return files
 
-
-def dialog(title,msg,btntxt):
-    with sg.Window(title,
-               layout=[[sg.Text(msg)],
-                       [sg.Button('Cancel', key='-dcan-'),
-                        sg.Button(btntxt, key='-dok-',
-                                  background_color='#ddffdd')]],
-               modal=True) as dialog:
-        for ev,va in dialog.event_iter():
-            if ev == '-dok-':
-                ans = True
-                break
-            elif ev == sg.WINDOW_CLOSED or ev == '-dcan-':
-                ans = False
-                break
-    return ans
 
 def desc(p: Param):
     ''' 利用スプライトセットの選択、追加など
@@ -1131,7 +1088,7 @@ def desc(p: Param):
             if len(sprite_preserv.sprites) == 0:
                 continue
             last_key = next(reversed(sprite_preserv.sprites))
-            ans = dialog('Purge Item', f'Delete {last_key}?', 'Sure')
+            ans = yn_dialog('Purge Item', f'Delete {last_key}?', 'Sure')
 
             if ans:
                 if len(sprite_preserv.sprites) > 0:
@@ -1139,7 +1096,8 @@ def desc(p: Param):
                     sprite_preserv.enabled.remove(last_key)
         elif ev == '-dmp-':
             outdir = DATA_DIR+pa.sep+sprite_preserv.name
-            ans = dialog('Dump Item', f'Dump image to {outdir}', 'Dump')
+            ans = yn_dialog('Dump Item', f'Dump image to {outdir}', 'Dump')
+            frush_ev(wn)
             if ans:
                 dump_sprites(outdir)
         elif ev == '-sav-':
@@ -1149,6 +1107,7 @@ def desc(p: Param):
             if fname == INT_LABEL or fname == '':
                 fname = 'temp'
             file = get_savefile(fname+'.spr', [('Sprite', '.spr'),])
+            frush_ev(wn)
             if file is not None and file != '':
                 save_spr(file)
         elif ev == '-sel-':
@@ -1156,6 +1115,7 @@ def desc(p: Param):
             select_items()
             # print('Enabled: ',sprite_preserv.enabled)
             wn.un_hide()
+            frush_ev(wn)
 
         img, mag = sprite_preview()
         wn['-prvw-'].update(data=img, size=img.size)

@@ -13,6 +13,9 @@ PEN_STEP = 10
 BACK_JITTER = 50  # 背景色の最大変化幅
 CMDFONTS = 'BIZ UDゴシック'
 
+DATA_DIR = 'samples'
+ZIPFILE = 'turtle.zip'
+
 DEBUG_PR = [
 #    'x',
 #    'y',
@@ -110,7 +113,7 @@ def desc(p: Param):
     layout = edit_layout()
 
     wn = sg.Window('Turtle Draw', layout=layout, grab_anywhere=True,
-                   resizable=True, modal=True)
+                   resizable=True) #, modal=True
     
     cmds = tur_preserve['cmd']
     wn['-t_cmds-'].update(text=cmds)
@@ -146,10 +149,11 @@ def desc(p: Param):
         elif ev == '-t_ld-':
             fname = wn['-t_file-'].get_text()
             cmds, fname = load_tur(fname)
-            print(f'FILE: {fname} / CMDS: {cmds}')
+            frush_ev(wn)
+            # print(f'FILE: {fname} / CMDS: {cmds}')
             if fname == '':  # =cancelled
                 continue
-            wn['-t_cmds-'].update(text=cmds)
+            wn['-t_cmds-'].update(text=''.join(cmds))
             wn['-t_file-'].update(text=fname)
             t_img = generate(p, command=cmds)
             wn['-t_test-'].update(data=t_img)
@@ -157,6 +161,7 @@ def desc(p: Param):
             fname = wn['-t_file-'].get_text()
             cmds = wn['-t_cmds-'].get_text()
             fname = save_tur(fname, cmds)
+            frush_ev(wn)
             if fname == '':  # =cancelled
                 continue
             wn['-t_file-'].update(text=fname)
@@ -165,21 +170,27 @@ def desc(p: Param):
     return t_img
 
 def load_tur(fname):
-    fname = get_openfile(fname, filetypes=[('Turtle command','.tur'),] )
-    print(f'File {fname}')
+    fname = get_openfile(sanitize_filename(fname),
+                         filetypes=[('Turtle command','*.tur'),],
+                         init_dir=DATA_DIR)
+    # print(f'File {fname}')
     if fname == '':
         return '', ''
     cmds = ''  # 仮 cmdsに\n入っててもよい
-    with open(fname, mode='r', encoding='shift-jis') as f:
-        print(f'read {fname}')
-        cmds = f.read()
+    #with open(fname, mode='r', encoding='shift-jis') as f:
+    #    print(f'read {fname}')
+    #    cmds = f.read()
+    cmds = read_filez(fname, add_zip=ZIPFILE)
+    cmds = [s+'\n' for s in cmds]
     return cmds, fname
 
 def save_tur(fname, cmds):
-    fname = get_savefile(fname, filetypes=[('Turtle command','.tur'),] )
+    fname = get_savefile(fname,
+                         filetypes=[('Turtle command','*.tur'),],
+                         init_dir=DATA_DIR)
     if fname == '':
         return ''
-    default_ext(fname, '.tur')
+    fname = sanitize_filename(fname, force_ext='.tur')
     with open(fname, mode='w', encoding='shift-jis') as f:
         f.write(cmds)
     return fname
@@ -523,10 +534,10 @@ Commands = {
     }
 
 
-def turtle_draw(draw, turtle, cmds, verbose=False):
+def turtle_draw(draw, turtle, cmds, verbose=True): #False):
     '''turtle_draw(draw: ImageDraw, turtle: Turtle, cmds: str)'''
     if isinstance(cmds, list):
-        cmds = ''.join(cmds)
+        cmds =  '\n'.join(cmds)
     if verbose:
         print(f'Command = {cmds}')
     ptr = 0
@@ -556,6 +567,9 @@ def turtle_draw(draw, turtle, cmds, verbose=False):
         elif cmds[cur] == '#':  # コメント
             while True:
                 cur += 1
+                # print(cmds[cur], ord(cmds[cur]))
+                if cur >= len(cmds):
+                    break
                 if ord(cmds[cur]) < 0x20:
                     break
             ptr = cur

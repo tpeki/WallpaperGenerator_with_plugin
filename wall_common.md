@@ -178,9 +178,26 @@
 # ■ filedialog.py
 
 - PySimpleGUI,TkEasyGUIとも、デフォルトファイル名の指定ができないため、簡易ファイルダイアログを作成
-- get_openfile(filename: str, filetypes: list of tuple)
+- get_openfile(filename: str, filetypes: list of tuple, init_dir='.')
   - デフォルトファイル名をfilenameとして、ファイルオープンダイアログを呼び出す
   - filetypesが省略された場合は [('PNG', '*.png'), ] をファイルタイプとする
   - 選択されたファイル名を返す。read用のダイアログのため、存在しないファイルの場合は空文字列''を返す
-- get_savefile(filename: str, filetypes: list of tuple)
+  - 初期ディレクトリはinit_dirで指定(デフォルトは'.')
+- get_savefile(filename: str, filetypes: list of tuple, init_dir='.')
   - save先の選択なのでファイル名が存在しないファイルだった場合にエラーにならない
+  - ファイルタイプのデフォルト値はPNGだが、設定ファイル保存では何か固有の拡張子の設定を推奨
+  - 初期ディレクトリはinit_dirで指定(デフォルトは'.')
+- sanitize_filename(name, ext=None, force_ext=None)、 sanitize_dirname(name)
+  - ファイル名/ディレクトリ名に禁止文字が含まれているWINDOWSの予約語になっていたら'_'を追加
+  - extが指定されていて拡張子が無ければ、extを拡張子として付加
+  - force_extが指定されていれば、拡張子を強制的にforce_extに変更
+  - 上記機能を組み込んだので **default_ext() は廃止**
+- yn_dialog(title: str, message: str, buttontext: str = 'Ok'):
+  - ダイアログのタイトルバー、メッセージを指定して、Yes/Cancel ダイアログを表示、OK(ボタン文字列は変更可)が押下されたらTrue、Cancelが押されたらFalseを返却
+- glob_filelistz(fpattern: str, add_zip=None)
+  - 戻り値は fpatternに合致するファイル名リスト, add_zip中のファイルリスト  の2リスト
+  - fpatternにマッチするファイルを検索してファイル名リストで返却
+  - add_zip を指定すると、指定zip中からfpattern に該当するファイル名リストを返却
+- read_filez(filepath: str, add_zip=None)
+  - filepath のファイルを一括読み込み (戻り値はsplitlines/SJISされたバッファ)
+  - filepath -> dir、name として、dir/add_zip、 ,\\add_zip も検索する 

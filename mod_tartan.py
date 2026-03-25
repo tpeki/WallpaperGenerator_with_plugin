@@ -36,6 +36,8 @@ PERIOD = 6
 DUTY = 50
 
 # 内部定数
+DATA_DIR = 'samples'
+ZIPFILE = 'tartan.zip'
 BASIC_COLOR = [(20, 60, 40),     # 0 緑
                (190, 20, 30),    # 1 赤
                (239, 227, 215),  # 2 オフホワイト
@@ -100,19 +102,27 @@ def layout():
              ]
     
     buttons = [sg.Text('File'),
-               sg.Input('', text_align='right', key='-t_file-',expand_x=True),
+               sg.Combo([], key='-t_file-',
+                        readonly=True, expand_x=True),
+               sg.Button('Load', key='-t_ld-'),
+               sg.Button('Save', key='-t_sv-'),
                sg.Text('', size=(2,1)),
                sg.Button('Clear', key='-t_clr-', background_color='#ddddff'),
                sg.Text('', size=(2,1), expand_x=True),
-               sg.Button('Load', key='-t_ld-'),
-               sg.Button('Save', key='-t_sv-'),
-               sg.Text(' ', size=(2,1)),
                sg.Button('Cancel', key='-t_can-', background_color='#ffdddd'),
                sg.Button('Apply', key='-t_ok-', background_color='#ddffdd'),
                ]
 
     return [[left, sg.Column(layout=right, expand_x=True, expand_y=True)],
             buttons]
+
+
+# ttnファイルリスト
+def ttnfile_list(directory=DATA_DIR):
+    patn = directory+pa.sep+'*.ttn'
+    files = [fn.replace('.ttn','') \
+             for fn in glob_filelistz(patn, add_zip=ZIPFILE)]
+    return files
 
 
 # パレット画像の生成
@@ -207,8 +217,11 @@ def pattern_resize(pat, sc):
 
 def load_pattern(fname):
     '''fnameからセットパターン及び利用色情報を読み込み、text, csetを返す'''
-    with open(fname, mode='r') as f:
-        buf = f.readlines()
+    fname = DATA_DIR+pa.sep+fname
+    # print(fname)
+    buf = read_filez(fname, add_zip=ZIPFILE)
+    if buf is None or buf == []:
+        return [], 0
 
     cset = [None]*10
     pat = []
@@ -238,7 +251,7 @@ def load_pattern(fname):
 
 # セットパターンをttnファイルへ保存
 def save_pattern(fname, pat, cset):
-    default_ext(fname, '.ttn')
+    fname = sanitize_filename(fname, force_ext='.ttn')
     with open(fname, mode='w') as f:
         f.write('[Colors]\n')
         for i in range(10):
@@ -260,7 +273,7 @@ def strtotuple(s):
 
 def desc(p: Param):
     wn = sg.Window('Tartan-Set Editor', layout=layout(),
-                   resizable=True, modal=True)
+                   resizable=True)  # , modal=True)
 
     # 色セットの読み込み
     cset = copy.copy(BASIC_COLOR)
@@ -284,6 +297,8 @@ def desc(p: Param):
     
     img = generate(p, pattern=pat)
     wn['-test-'].update(data=img)
+    flist = ttnfile_list()
+    wn['-t_file-'].update(values=flist)
 
     while True:
         ev, va = wn.read()
@@ -323,23 +338,27 @@ def desc(p: Param):
         elif ev == '-t_clr-':  # セットを初期化
             pat = []
         elif ev == '-t_ld-':  # 読み込み
-            fname = get_openfile('', filetypes=[('Tartan set','.ttn'),])
+            fname = wn['-t_file-'].get()
             if fname != '' and fname is not None:
                 old_cset = copy.copy(cset)
-                pat, cset = load_pattern(fname)
-                wn['-t_file-'].update(fname)
+                pat, cset = load_pattern(fname+'.ttn')
+                # wn['-t_file-'].update(fname)
                 if cset != old_cset:
                     pimg = palimg(cset)
                     wn['-pallet-'].update(data=pimg)
                     
                 p.savefile = fname
         elif ev == '-t_sv-':  # 保存
-            oldf = wn['-t_file-'].get()
-            fname = get_savefile(oldf, filetypes=[('Tartan set','.ttn'),])
+            oldf = wn['-t_file-'].get()+'.ttn'
+            fname = get_savefile(oldf, filetypes=[('Tartan set','*.ttn'),],
+                                 init_dir=DATA_DIR)
+            frush_ev(wn)
             if fname != '' and fname is not None:
                 save_pattern(fname, pat, cset)
                 wn['-t_file-'].update(fname)
                 p.savefile = fname
+            flist = ttnfile_list()
+            wn['-t_file-'].update(values=flist)
             continue
         elif ev in ('-t_rwt-', '-t_dbl-', '-t_hlf-'):
             # リライト/倍幅化/半幅化
