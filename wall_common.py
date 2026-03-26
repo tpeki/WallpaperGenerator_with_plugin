@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import random
 import re
 import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 import os.path as pa
 import colorsys
 
@@ -194,6 +194,17 @@ def sat_attenate(image, ratio):
     '''彩度の変更： 0 < ratio(%) < 200 '''
     enhancer = ImageEnhance.Color(image)
     return enhancer.enhance(min(2.0, max(0.0, ratio/100.0)))
+
+def bri_attenate(image, ratio):
+    '''明度の変更： 0 < ratio(%) < 200 '''
+    enhancer = ImageEnhance.Brightness(image)
+    return enhancer.enhance(min(2.0, max(0.0, ratio/100.0)))
+
+def con_attenate(image, ratio):
+    '''コントラストの変更： 0 < ratio(%) < 200 '''
+    enhancer = ImageEnhance.Contrast(image)
+    return enhancer.enhance(min(2.0, max(0.0, ratio/100.0)))
+
 
 def rgb_lerp(c1, c2, t):
     ''' RGB値の線形補完 c1,c2=tuple(r,g,b), t=比率(0..1)'''

@@ -32,27 +32,42 @@
 
 - clip8(x)
    xを8bit数値に制限する(0<= x <=255)
+
 - rgb_random_jitter(color: RGBColor,  jitter: int)
    color の各値を jitter の幅でランダムに変化させたRGBColor を返す
+
 - rated_jitter(color: RGBColor,  jitter_r: int)
     jitter_r(0<= jitter_r <=100) の範囲のランダムな割合で color の各値を変化させたRGBColor を返す
      各色を１つの変化量で変えるため、色合いの変化が生じない
-- brightness(color: RGBColor, f:float =1.0, h:float =0.0, s:float =1.0, bg:RGBCo9lor =None)
+
+- brightness(color: RGBColor, f:float =1.0, h:float =0.0, s:float =1.0, bg:RGBColor =None)
    HSL空間で色を調整する。 f：明度、h:色合い、s=彩度 で、それぞれ0~1の間の実数。
     (0,0,0)以下になってしまった場合に、bgが指定されていればbgを返す
+
 - rgb_lerp(c1: list, c2: list, t: float )
   c1(3値tuple)とc2(3値tuple)の各値を t:(1-t)でブレンドしたtupleを返す
+
 - rgb_string((r,g,b)) 、 rgb_string([r,g,b]) もしくは rgb_string(s:str)
   - 色指定パラメータを'#rrggbb' の16進文字列色指定にして返す
 
 - to_rgb((r,g,b)) 、 to_rgb([r,g,b])または to_rgb(s:str)
   - 色指定パラメータをr,g,b の数値にして返す
+
 - bg_and_font(color: str | RGBColor | tuple[int] ) -> str, str
    - 背景色を受け取り、前景テキスト色と背景色の色指定文字列を返す
+
 - sat_attenate(image, ratio)
    - Image.Imageを受け取り、彩度をratio(0～200[%])に構成したimageを返す
 
+- bri_attenate(image, ratio)
 
+   - Image.Imageを受け取り、明度をratio(0～200[%])に構成したimageを返す
+
+- con_attenate(image, ratio)
+
+   - Image.Imageを受け取り、コントラストをratio(0～200[%])に構成したimageを返す
+
+   
 
 
 ## Param： パラメータ引数クラス

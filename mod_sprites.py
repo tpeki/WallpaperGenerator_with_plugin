@@ -1,6 +1,7 @@
 import re
 import numpy as np
-from PIL import Image, ImageDraw, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFilter, \
+     ImageChops, ImageOps, UnidentifiedImageError
 import random
 import math
 import copy
@@ -13,11 +14,13 @@ from wall_common import *
 
 # --- 定数設定 ---
 PATTERN_SIZE = 4
-DENSITY = 10
 DELTA = 50
 BGCOLOR1 = (1,1,0x99)
 BGCOLOR2 = (1,1,1)
+OLCOLOR = (0,0,0)
 TINT = 100
+BRIGHT = 100
+OUTLINE = 0
 STAR = 8
 
 # --- 内部定数設定 ---
@@ -26,15 +29,18 @@ HEIGHT = 1080
 MAX_SIZE = (64,64)
 DATA_DIR = 'samples'
 ZIPFILE = 'sprites.zip'
+DENSITY = 10
 AA=2
 
 # module基本情報
 def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, 'スプライトまみれ',
                        {'color1':'背景色', 'color2':'背景色2',
-                        'color_jitter':'彩度', 'sub_jitter2':'星(0:OFF)',
+                        'color3':'輪郭色',
+                        'color_jitter':'彩度(%)', 'sub_jitter':'明度(%)',
+                        'sub_jitter2':'星(0:OFF)',
                         'pwidth':'パターン拡大率', 'pheight':'間隔',
-                        'pdepth':'密度(微調整)'})
+                        'pdepth':'輪郭幅(0:なし)'})
     return module_name
 
 
@@ -42,11 +48,13 @@ def intro(modlist: Modules, module_name):
 def default_param(p: Param):
     p.color1.itoc(*BGCOLOR1)
     p.color2.itoc(*BGCOLOR2)
+    p.color3.itoc(*OLCOLOR)
     p.color_jitter = TINT
+    p.sub_jitter = BRIGHT
     p.sub_jitter2 = STAR
     p.pwidth = PATTERN_SIZE
     p.pheight = DELTA
-    p.pdepth = DENSITY
+    p.pdepth = OUTLINE
     return p
 
 
@@ -1182,8 +1190,29 @@ def simple_frontend():
 # -----
 # モジュール動作
 # -----
-def starfield(w, h, pixel, star_density=2, seed=None):
+def outlined(image, width, border='#000000'):
+    '''輪郭強調'''
+    width = min(max(width, 0), 10)
+    if width == 0:
+        return image
+    contour = image.filter(ImageFilter.CONTOUR)
+    bim = Image.new('RGB',image.size, border)
+    if width ==1:
+        mask = ImageOps.invert(contour.convert('L'))
+    else:
+        thick = contour
+        for count in range(width-1):
+            for dx,dy in [(1,0),(0,1)]:
+                  shifted = ImageChops.offset(thick, dx, dy)
+                  thick = ImageChops.darker(thick, shifted)
+        mask = ImageOps.invert(thick.convert('L'))
 
+    image.paste(bim, (0,0), mask)
+    return image
+
+
+def starfield(w, h, pixel, star_density=2, seed=None):
+    '''Galagaっぽい星背景'''
     rng = np.random.default_rng(seed)
 
     # 低解像度星マップ
@@ -1226,8 +1255,10 @@ def generate(p: Param):
     ow, oh = p.width, p.height
     pat_size = p.pwidth
     delta = p.pheight
-    density = p.pdepth / 100
+    density = DENSITY
+    outline = p.pdepth
     tint = p.color_jitter
+    bright = p.sub_jitter
     stars = p.sub_jitter2
 
     w = int(ow + p.pwidth*1.3 + delta*3)
@@ -1423,7 +1454,11 @@ def generate(p: Param):
 
     base=base.crop((ofsx,ofsy,ow+ofsx,oh+ofsy))
 
+    if outline > 0:
+        base = outlined(base, outline, p.color3.ctox())
+
     base=sat_attenate(base,tint)
+    base=bri_attenate(base,bright)
 
     img=diagonal_gradient_rgb(ow,oh,p.color1,p.color2)
     
