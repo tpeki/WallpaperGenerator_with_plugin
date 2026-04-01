@@ -26,7 +26,7 @@ STAR = 8
 # --- 内部定数設定 ---
 WIDTH = 1920
 HEIGHT = 1080
-MAX_SIZE = (64,64)
+MAX_SIZE = (128,128)
 DATA_DIR = 'samples'
 ZIPFILE = 'sprites.zip'
 DENSITY = 10
@@ -148,6 +148,7 @@ class SpriteSet:
         self.desc=''
         self.sprites = {}
         self.enabled = []
+        self.anglefix = None
        
     def load_internal(self):
         self.sprites = copy.deepcopy(INTERNAL_SET)
@@ -339,7 +340,7 @@ def compress(buf):
         return len(f',rep{k-1}')
 
     def cost_turn():
-        return len(',turnover')
+        return len(f',turnover{k-1}')
 
     for i in range(n-1, -1, -1):
 
@@ -388,7 +389,10 @@ def compress(buf):
 
         elif typ == 'turn':
             out.extend(buf[i:i+k])
-            out.append(',turnover')
+            if i == 1:
+                out.append(',turnover')
+            else:
+                out.append(f',turnover{k}')
             i += 2*k
 
     return out
@@ -695,12 +699,12 @@ def create_spr():
                 break
         elif ev == '-import-':
             ftypes = '*.png;*.jpg;*.gif;*.ico'
-            fname = get_openfile('', filetypes=[('Bitmap',ftypes),
-                                           ('any', '.*')])
+            fname = get_openfile('',
+                                 filetypes=[('Bitmap',ftypes), ('any', '.*')])
             frush_ev(wn)
             if fname is not None and fname != '':
                 img = Image.open(sanitize_filename(fname))
-                w,h = [min(64,_) for _ in img.size]  # 最大64ドット四方に制限
+                w,h = [min(MAX_SIZE[_],img.size[_]) for _ in (0,1)]  # ザイズ制限
                 img = img.resize((w,h), resample=Image.NEAREST)
                 img = img.quantize(colors=16).convert('RGB')
                 wn['-fname-'].update(pa.splitext(pa.split(fname)[1])[0])
@@ -783,7 +787,7 @@ def read_and_conv(file, trans):
         img = Image.open(file)
     except UnidentifiedImageError:
         return None
-    w,h = [min(64,_) for _ in img.size]  # 最大64ドット四方に制限
+    w,h = [min(MAX_SIZE[_],img.size[_]) for _ in (0,1)]  # サイズ制限
     img = img.resize((w,h),resample=Image.NEAREST)
     img = img.convert('RGB')
     pattern = conv_spr(img, trans)
@@ -832,10 +836,16 @@ def sprite_pattern(name:str):
             cmd = ca.lower()
             
             if 'turnover' in cmd:
-                q = len(spr)
-                for i in range(q):
-                    spr.append(spr[q-i-1])
-                continue  # break
+                r = DIGIT_RE.search(cmd)
+                if r:
+                    q = min(int(r.group()), len(spr))
+                else:
+                    q = len(spr)
+                
+                block = spr[-q:]
+                #block = [copy.deepcopy(x) for x in reversed(block)]
+                block = [x for x in reversed(block)]
+                spr.extend(block)
 
             if 'rep' in cmd:
                 if not spr:
@@ -1045,11 +1055,18 @@ def desc(p: Param):
 
     files = sprfile_list()
     preview_image, mag = sprite_preview()
+    anglsw = sprite_preserv.anglefix is not None
+    angle = sprite_preserv.anglefix if anglsw else 0
+        
 
     lo = [[sg.Combo(files, key='-set-', readonly=True),
            sg.Button('Load',key='-fread-', background_color='#ddddff'),
            sg.Text('', expand_x=True),
-           sg.Text(f'x{mag}',key='-mag-')],
+           sg.Text('Angle Fix'),
+           sg.Checkbox('', default=anglsw, key='-anglsw-'),
+           sg.Input(str(angle), key='-angle-', size=(3,1)),
+           sg.Text('', expand_x=True),
+           sg.Text(f'Mag = x{mag}',key='-mag-')],
           [sg.Text(sprite_preserv.desc, key='-sdesc-')],
           [sg.Image(data=preview_image, key='-prvw-',
                     size=preview_image.size)],
@@ -1067,7 +1084,7 @@ def desc(p: Param):
                    element_justification='right')
     while True:
         ev,va = wn.read()
-
+        
         if ev == sg.WINDOW_CLOSED or ev == '-ok-':
             if len(sprite_preserv.sprites) > 0:
                 break
@@ -1114,7 +1131,8 @@ def desc(p: Param):
             fname = sprite_preserv.name
             if fname == INT_LABEL or fname == '':
                 fname = 'temp'
-            file = get_savefile(fname+'.spr', [('Sprite', '.spr'),])
+            file = get_savefile(fname+'.spr', [('Sprite', '.spr'),],
+                                init_dir=DATA_DIR)
             frush_ev(wn)
             if file is not None and file != '':
                 save_spr(file)
@@ -1124,14 +1142,17 @@ def desc(p: Param):
             # print('Enabled: ',sprite_preserv.enabled)
             wn.un_hide()
             frush_ev(wn)
+        elif ev == '-anglsw-':
+            anglsw = va['-anglsw-']
 
         img, mag = sprite_preview()
         wn['-prvw-'].update(data=img, size=img.size)
         wn['-mag-'].update(f'x{mag}')
         wn.refresh()
 
+    sprite_preserv.anglefix = int(va['-angle-']) % 360 if anglsw else None
     wn.close()
-
+    
     if sprite_backup.name != sprite_preserv.name:
         return generate(p)
     return
@@ -1430,8 +1451,11 @@ def generate(p: Param):
         placed.append((px,py))
         placed_radius.append(r)
 
-        theta=random.random()*360
-
+        if sprite_preserv.anglefix is None:
+            theta=random.random()*360
+        else:
+            theta=sprite_preserv.anglefix
+            
         pat=sprite_pattern(ps)
         simg=sprite_image(pat).resize((int(sw*pat_size),int(sh*pat_size)),
                                       resample=Image.NEAREST)
