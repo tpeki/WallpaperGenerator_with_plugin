@@ -202,7 +202,10 @@ def layout(modlist, efxlist):
                               ]
     layout = [[sg.Menu(menudef, key='-mnu-')],
               [sg.Text('', key='-modname-'), sg.Text(' '),
-               sg.Text('', key='-moddesc-', expand_x=True)],
+               sg.Text('', key='-moddesc-', expand_x=True),
+               sg.Text('',expand_x=True), sg.Text('Size:'),
+               sg.Input('width', key='-width-', size=(4,1)), sg.Text('x'),
+               sg.Input('height', key='-height-', size=(4,1))],
               [sg.Text('',expand_x=True),
                sg.Image(key='-img-', background_color="#7f7f7f",
                         size=(640,360), enable_events=True),
@@ -322,6 +325,8 @@ def gui_main(modlist: Modules, mods, param: Param,
 
     image = mods[modname].generate(param)
     wn['-img-'].update(data=image)
+    wn['-width-'].update(param.width)
+    wn['-height-'].update(param.height)
 
     def on_click(event):
         # print('onclick')
@@ -356,6 +361,7 @@ def gui_main(modlist: Modules, mods, param: Param,
     print('-- main loop --')
     while True:
         ev, va = wn.read()
+        #print(f'ev:{ev}, va:{va}')
 
         if ev == sg.WINDOW_CLOSED or ev == 'Exit' or ev == '-done-':
             break
@@ -370,6 +376,11 @@ def gui_main(modlist: Modules, mods, param: Param,
             wn['-fname-'].update(param.savefile)
             continue
         elif ev == '-redo-':
+            try:
+                param.width = int(va['-width-'])
+                param.height = int(va['-height-'])
+            except ValueError:
+                param.width, param.height = IMAGE_WIDTH, IMAGE_HEIGHT
             image = get_image_thread(wn, param, mods, modname)
             if image is not None:
                 wn['-img-'].update(data=image)
