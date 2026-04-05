@@ -136,6 +136,7 @@ def layout(modlist, efxlist):
     x = ['AE_'+item for item in efxlist.modules]
     menudef = [['File', ['Save', 'Exit']],
                ['Module', modlist.modules],
+               ['Hold', ['Hold', 'Clear', 'Retrieve']],
                ['Effects', x],
                ]
     
@@ -400,6 +401,23 @@ def gui_main(modlist: Modules, mods, param: Param,
                 wn['-img-'].update(data=image)
             else:
                 print("DON'T CLOSE DIALOGUE")
+            continue
+        elif ev == 'Hold':
+            param.keep(modname, image)
+            continue
+        elif ev == 'Clear':
+            param.unkeep()
+            continue
+        elif ev == 'Retrieve':
+            t = param.retrieve()
+            if t in modlist.modules:
+                set_module(wn, modlist, t)
+                param.pattern = t
+                param.savefile = ''
+                set_param(wn, param, modlist.mod_gui[t])
+                modname = t
+                image = param.bg()
+                wn['-img-'].update(data=image)
             continue
         elif ev in ('-color1-3', '-color2-3', '-color3-3'):
             wgt = wn['-img-'].widget

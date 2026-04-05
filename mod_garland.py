@@ -50,8 +50,8 @@ def generate(p: Param):
     color1 = p.color1.ctoi()
     color2 = p.color2.ctoi()
     
-    img = np.empty((height, width, 3), dtype=np.uint8)
-    img[:] = color2
+    img_rgb = np.zeros((height, width, 3), dtype=np.float32)
+    img_a   = np.zeros((height, width), dtype=np.float32)
 
     radius_a = p.pwidth if p.pwidth > 10 else 10
     
@@ -131,14 +131,34 @@ def generate(p: Param):
             circle_color = circle_colors[idx]
 
             # αブレンド
-            img[yy] = (
-                img[yy] * (1 - alpha[:, None]) +
-                circle_color * alpha[:, None]
+            dst_rgb = img_rgb[yy]
+
+            dst_a   = img_a[yy]
+            src_a = alpha
+            out_a = src_a + dst_a * (1 - src_a)
+            
+            out_rgb = (
+                circle_color * src_a[:, None] +
+                dst_rgb * dst_a[:, None] * (1 - src_a[:, None])
             )
+            
+            out_rgb /= np.maximum(out_a[:, None], 1e-6)
+            
+            img_rgb[yy] = out_rgb
+            img_a[yy]   = out_a
 
         y -= pitch_y
 
-    return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGB")
+    rgba = np.dstack([np.clip(img_rgb, 0, 255), img_a*255]).astype(np.uint8)
+    fg = Image.fromarray(rgba, "RGBA")
+    
+    if p.h_img is None:
+        bg = Image.new('RGB', (width, height), p.color2.ctox())
+    else:
+        bg = p.bg()
+        
+    bg.paste(fg, (0,0), fg.split()[3])
+    return bg    
 
 
 if __name__ == "__main__":

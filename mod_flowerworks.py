@@ -153,7 +153,7 @@ def generate_random_mask(offsets, weights, radius, pen_size, style=115):
 # ランダム版
 def scatter_spiro(p: Param):
     iwidth, iheight = p.width, p.height
-    vase = p.color1.ctoi()
+    #vase = p.color1.ctoi()
     flower = p.color2.ctoi()
     fl_var = p.color_jitter
     sz_var = p.sub_jitter
@@ -165,7 +165,9 @@ def scatter_spiro(p: Param):
     pen_size = PEN_RADIUS
 
     # float canvas
-    canvas = np.full((iheight, iwidth, 3), vase, dtype=np.float32)
+    #canvas = np.full((iheight, iwidth, 3), vase, dtype=np.float32)
+    canvas_rgb = np.zeros((iheight, iwidth, 3), dtype=np.float32)
+    canvas_a   = np.zeros((iheight, iwidth, 1), dtype=np.float32)
 
     offsets, weights = make_pen_kernel(pen_size)
 
@@ -233,19 +235,38 @@ def scatter_spiro(p: Param):
 
         # --- ソフト合成（壁紙向け） ---
         alpha = sub_mask ** FOCUS * CONTRAST
-        canvas[y0:y1, x0:x1] = (
-            canvas[y0:y1, x0:x1] * (1 - alpha) +
-            color * alpha
-        )
+
+        #canvas[y0:y1, x0:x1] = (
+        #    canvas[y0:y1, x0:x1] * (1 - alpha) +
+        #    color * alpha
+        #)
+
+        dst_rgb = canvas_rgb[y0:y1, x0:x1]
+        dst_a   = canvas_a[y0:y1, x0:x1]
+
+        # アルファ合成（over演算）
+        out_a = alpha + dst_a * (1 - alpha)
+
+        # 0除算防止
+        out_rgb = (color * alpha + dst_rgb * dst_a * (1 - alpha))
+        out_rgb /= np.maximum(out_a, 1e-6)
+
+        canvas_rgb[y0:y1, x0:x1] = out_rgb
+        canvas_a[y0:y1, x0:x1]   = out_a
 
     # 仕上げ
-    return canvas
+    #return canvas
+    rgba = np.dstack([
+        canvas_rgb,
+        canvas_a * 255
+        ])
+    return rgba
 
 
 # 整列版
 def align_spiro(p: Param):
     iwidth, iheight = p.width, p.height
-    vase = p.color1.ctoi()
+    #vase = p.color1.ctoi()
     flower = p.color2.ctoi()
     fl_var = p.color_jitter
     sz_var = p.sub_jitter
@@ -256,7 +277,9 @@ def align_spiro(p: Param):
     
     pen_size = PEN_RADIUS
     
-    canvas = np.full((iheight, iwidth, 3), vase, dtype=np.float32)
+    # canvas = np.full((iheight, iwidth, 3), vase, dtype=np.float32)
+    canvas_rgb = np.zeros((iheight, iwidth, 3), dtype=np.float32)
+    canvas_a   = np.zeros((iheight, iwidth, 1), dtype=np.float32)
 
     offsets, weights = make_pen_kernel(pen_size)
 
@@ -340,25 +363,51 @@ def align_spiro(p: Param):
             sub_mask = mask[my0:my1, mx0:mx1][..., None]
 
             # --- αブレンド（あなたの設定） ---
+            # alpha = (sub_mask ** FOCUS) * (CONTRAST*1.5)
+            #
+            # canvas[y0:y1, x0:x1] = (
+            #     canvas[y0:y1, x0:x1] * (1 - alpha) +
+            #     color * alpha
+            # )
             alpha = (sub_mask ** FOCUS) * (CONTRAST*1.5)
+            
+            dst_rgb = canvas_rgb[y0:y1, x0:x1]
+            dst_a   = canvas_a[y0:y1, x0:x1]
+            
+            out_a = alpha + dst_a * (1 - alpha)
+            
+            out_rgb = (color * alpha + dst_rgb * dst_a * (1 - alpha))
+            out_rgb /= np.maximum(out_a, 1e-6)
 
-            canvas[y0:y1, x0:x1] = (
-                canvas[y0:y1, x0:x1] * (1 - alpha) +
-                color * alpha
-            )
-
-    return canvas
+            canvas_rgb[y0:y1, x0:x1] = out_rgb
+            canvas_a[y0:y1, x0:x1]   = out_a
+            
+    # return canvas
+    rgba = np.dstack([canvas_rgb, canvas_a*255])
+    return rgba
 
 # イメージ生成FE
 def generate(p: Param):
     if p.sub_jitter2:
-        canvas = scatter_spiro(p)
+        fg = scatter_spiro(p)
     else:
-        canvas = align_spiro(p)
+        fg = align_spiro(p)
     
-    # 仕上げ
-    canvas = np.clip(canvas, 0, 255).astype(np.uint8)
-    return Image.fromarray(canvas)
+    #canvas = np.clip(canvas, 0, 255).astype(np.uint8)
+    #return Image.fromarray(canvas)
+
+    fg = np.clip(fg, 0, 255).astype(np.uint8)
+    fg_img = Image.fromarray(fg, mode='RGBA')
+
+    # 背景生成
+    if p.h_img is None:
+        bg = Image.new('RGB', (p.width, p.height), p.color1.ctox())
+    else:
+        bg = p.bg()
+
+    # アルファで貼り付け
+    bg.paste(fg_img, (0, 0), fg_img.split()[3])
+    return bg
 
 
 # -----------------------------

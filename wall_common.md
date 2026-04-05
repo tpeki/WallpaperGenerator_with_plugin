@@ -80,7 +80,9 @@
 - pwidth, pheight, pdepth  主に生成パターン要素のサイズのためのパラメータ 数値
 - wwidth,wheight,wposx,wposy  メインウィンドウのサイズと位置
 - pattern  現在アクティブなモジュール名
-- savefile  画像の保存ファイル名 (モジュール名＋0~9のサフィックスを自動付与)
+- savefile  画像の保存ファイル名 (モジュール名＋0~9のサフィックスを自動付与
+- h_state ステートセーブ(一時保持)情報
+- h_img 一時保持画像
 
 ### 初期値設定
 
@@ -91,6 +93,26 @@
 - is_param(x:str)
 
   xがGUIで設定可能なパラメータ名であればTrue
+
+- keep( modulename: str, image: Image.image)
+
+  modulenameと一緒に、現在のParamの属性値をh_stateに辞書形式で保存、更にimageが指定されていればimageをh_imgに保存する
+
+- unkeep()
+
+  keepで保存した情報を消去する
+
+- retrieve() -> modulename
+
+  keepで保管した情報を各アトリビュートに書き戻す。保持情報は消去されない
+
+- bg( width: int=0, height: int=0)
+
+  h_imgをリサイズありで読み出す。第1引数をNone にした場合は、保存されている h_img をそのまま返す。
+
+  width,heightのどちらかが0なら、self.width、 self.height のサイズにリサイズして画像を返す。また、width,heightを指定した場合は、そのサイズにresizeする。(リサイズ時のresamplingにはLANCZOSを使用)
+
+  
 
 ## Modules： モジュール情報クラス
 

@@ -215,8 +215,7 @@ def generate_linear(p: Param):
     start_x, start_y = p.pwidth, p.pheight
     jitter = JITTER
 
-    canvas = vertical_gradient_rgb(CANVAS_W, CANVAS_H,
-                                   bg1, bg2).convert('RGBA')
+    canvas = Image.new('RGBA', (CANVAS_W, CANVAS_H), (0,0,0,0))
 
     # 角度変換
     theta = np.deg2rad(la)
@@ -277,8 +276,7 @@ def generate_arc(p : Param):
     steps = max(abs(steps_raw), 2)
     jitter = JITTER
 
-    canvas = vertical_gradient_rgb(CANVAS_W, CANVAS_H,
-                                   bg1, bg2).convert('RGBA')
+    canvas = Image.new('RGBA', (CANVAS_W, CANVAS_H), (0,0,0,0))
 
     if steps_raw >= 0:
         direction = 1
@@ -334,11 +332,19 @@ def generate_arc(p : Param):
 def generate(p: Param):
     radius = p.sub_jitter2
     if radius != 0:
-        img = generate_arc(p)
+        fg = generate_arc(p)
     else:
-        img = generate_linear(p)
+        fg = generate_linear(p)
 
-    return img
+    if p.h_img is None:
+        bg = vertical_gradient_rgb(p.width, p.height,
+                                   p.color2, p.color3).convert('RGBA')
+    else:
+        bg = p.bg().convert('RGBA')
+        
+    bg.alpha_composite(fg)
+    return bg.convert('RGB')
+
 
 # ----
 # テスト

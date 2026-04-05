@@ -378,9 +378,13 @@ def generate(p: Param):
 
     # 背景となるimageを生成
     # image = Image.new("RGB", (width, height), base_color)
-    image = vertical_gradient_rgb(width, height,
-                                  base_color,
-                                  rgb_random_jitter(base_color, jitter))
+    if p.h_img is None:
+        image = vertical_gradient_rgb(width, height,
+                                      base_color,
+                                      rgb_random_jitter(base_color, jitter))
+    else:
+        image = p.bg()
+
     draw = ImageDraw.Draw(image)
     font_name = emoji_preserv['font']
 

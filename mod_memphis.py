@@ -982,7 +982,11 @@ def generate(p: Param):
     base = base.crop((ofsx,ofsy,ow+ofsx, oh+ofsy))
     base = sat_attenate(base, tint)
 
-    img = vertical_gradient_rgb(ow, oh, p.color1, p.color2)
+    if p.h_img is None:
+        img = vertical_gradient_rgb(ow, oh, p.color1, p.color2)
+    else:
+        img = p.bg(ow, oh)
+        
     img.paste(base, (0,0), base)
 
     return img

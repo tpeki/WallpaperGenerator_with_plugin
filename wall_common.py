@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import random
 import re
+import copy
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 import os.path as pa
@@ -68,6 +69,9 @@ class RGBColor:
 
 
 SAVE_NUM=9
+PARAMVALS = ['color1', 'color2', 'color3',
+             'color_jitter', 'sub_jitter', 'sub_jitter2',
+             'pwidth', 'pheight', 'pdepth']
 
 @dataclass
 class Param:
@@ -89,6 +93,8 @@ class Param:
     pdepth: int = 0
     pattern: str = ''  # module名
     savefile: str = ''
+    h_img = None  # hold image
+    h_state = {}  # hold state
 
     def file_name(self):
         if len(self.savefile) < 1:
@@ -104,9 +110,51 @@ class Param:
             self.savefile = fname
         return self.savefile
 
-PARAMVALS = ['color1', 'color2', 'color3',
-             'color_jitter', 'sub_jitter', 'sub_jitter2',
-             'pwidth', 'pheight', 'pdepth']
+    def keep(self, modname: str='', image=None):  # 現在の設定を保持(画像も)
+        self.h_img = None
+        self.h_state['module'] = modname
+        if modname is not None and modname != '':
+            list = ['width', 'height', *PARAMVALS]
+            for x in list:
+                self.h_state[x] = copy.deepcopy(getattr(self, x))
+            self.h_state['width'] = self.width
+            self.h_state['height'] = self.height
+            if image is not None:
+                self.h_img = image.copy()
+            else:
+                w = max(1, self.width)
+                h = max(1, self.height)
+                self.h_img = Image.new('RGB', (w,h), 0)
+
+    def unkeep(self):  # keepしたものをクリア
+        self.h_img = None
+        self.h_state = {}
+
+    def retrieve(self):
+        if 'module' in self.h_state:
+            list = ['width', 'height', *PARAMVALS]
+            for x in list:
+                if x in self.h_state:
+                    setattr(self, x, copy.deepcopy(self.h_state[x]))
+            return  self.h_state['module']
+        else:
+            return None
+
+    def bg(self, width=0, height=0):
+        """keepしたimageを取得(リサイズ有り): 第1引数=Noneにするとresizeなし
+           width,heightが無指定の場合、(self.width, self.height)にリサイズ
+        """
+        if self.h_img is None:
+            return None
+        w = self.width if width == 0 else width
+        h = self.height if height == 0 else height
+        iw, ih = self.h_img.size
+        img = self.h_img.copy()
+        if w is not None and h is not None and (iw != w or ih != h):
+            return img.resize((w,h),resample=Image.LANCZOS)
+        else:
+            return img
+
 
 # プラグインのspec()で、モジュール名、説明、利用パラメータを返すように
 # して、それをModulesに保存

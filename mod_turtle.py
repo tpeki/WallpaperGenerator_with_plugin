@@ -321,7 +321,7 @@ class Turtle:
         # print(f'   Pendown={self.pen}, New coord = ({self.x},{self.y})')
         if self.pen:
             r = self.width // 2
-            c = self.color.ctoi()
+            c = tuple(list(self.color.ctoi())+[255])
             draw.line((self.lastx,self.lasty, self.x,self.y),
                       width=self.width, fill=c)
             draw.circle((self.lastx, self.lasty), r,  fill=c)
@@ -435,7 +435,8 @@ class Turtle:
     def put_text(self, draw, s):
         p = min(64, max(int(self.width*2.4),10))
         font = ImageFont.truetype('meiryob.ttc',p)
-        draw.text((self.x, self.y), s, self.color.ctox(), font=font)
+        c = tuple(list(self.color.ctoi())+[255])
+        draw.text((self.x, self.y), s, c, font=font)
         bbox = draw.textbbox((self.x, self.y), s, font=font)
         self.last_x = self.x
         self.last_y = self.y
@@ -644,16 +645,24 @@ def generate(p: Param, command=''):
     turtle = Turtle(size=pen_size, step=pen_step, color=pen_color,
                     x=start_x, y=start_y)
 
-    # 描画イメージの生成・背景作成
-    bg_start = rgb_random_jitter(bg_color, jitter)
-    bg_end   = rgb_random_jitter(bg_color, jitter)
-    image = diagonal_gradient_rgb(width, height, bg_start, bg_end)
+    # 描画イメージの生成
+    image = Image.new('RGBA',(width, height),(0,0,0,0))
     draw = ImageDraw.Draw(image)
         
     turtle_draw(draw, turtle, cmd, verbose=False)
     # print(cmd)
 
-    return image
+    if p.h_img is None:
+        bg_start = rgb_random_jitter(bg_color, jitter)
+        bg_end   = rgb_random_jitter(bg_color, jitter)
+        bg = diagonal_gradient_rgb(width, height, bg_start, bg_end)
+    else:
+        bg = p.bg(width, height)
+
+    bg = bg.convert('RGBA')
+    bg.alpha_composite(image)
+
+    return bg
     
 
 if __name__ == '__main__':

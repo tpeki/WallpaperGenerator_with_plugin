@@ -1484,7 +1484,10 @@ def generate(p: Param):
     base=sat_attenate(base,tint)
     base=bri_attenate(base,bright)
 
-    img=diagonal_gradient_rgb(ow,oh,p.color1,p.color2)
+    if p.h_img is None:
+        img = diagonal_gradient_rgb(ow,oh,p.color1,p.color2)
+    else:
+        img = p.bg(ow, oh)
     
     if stars > 0:
         star_img = starfield(ow, oh, pat_size, stars)

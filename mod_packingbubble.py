@@ -78,7 +78,10 @@ def generate(p: Param):
     min_r = min(max(p.pheight, 10), max_r)
     margin = min(max(p.pdepth, -100), 1000)
     
-    img = horizontal_gradient_rgb(width, height, bg_color1, bg_color2)
+    if p.h_img is None:
+        img = horizontal_gradient_rgb(width, height, bg_color1, bg_color2)
+    else:
+        img = p.bg()
 
     angle_rad = np.deg2rad(grad_angle)
     

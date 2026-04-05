@@ -8,7 +8,7 @@ ITERATION = 4                  # 再帰の深さ（次数）
 LINE_WIDTH = 20                # 計算時の曲線の太さ（余白の幅にもなります）
 LINE_COLOR = (240, 170, 120)   # 曲線の色
 BG_COLOR = (90, 100, 120)        # 背景の色
-JITTER = 70
+JITTER = 40
 
 def intro(modlist: Modules, module_name):
     '''module基本情報'''
@@ -73,6 +73,8 @@ def generate(p: Param):
     line_width = min(max(p.pwidth,5),80)
     iteration = min(max(p.pheight,1),10)
     jitter = p.color_jitter
+
+    long_edge = max(width, height)
     
     # 1. グリッドの分割数を決定 (2^n)
     n = 3**iteration
@@ -85,6 +87,7 @@ def generate(p: Param):
     side = n * cell_size
     padding = cell_size // 2 # 外側の余白
     canvas_size = (side, side)
+    line_width = int(line_width*(long_edge/side))
     
     # 座標リストを生成
     seq = peano_lsystem(iteration)
@@ -93,25 +96,33 @@ def generate(p: Param):
         step=cell_size
     )
 
-    # 3. 描画＋背景を作成
-    bg_start = rgb_random_jitter(bg_color, jitter)
-    bg_end   = rgb_random_jitter(bg_color, jitter)
-    image = diagonal_gradient_rgb(canvas_size[0], canvas_size[1],
-                                     bg_start, bg_end)
+    # 3. 描画＋背景を作成 → 背景透明(後で合成)
+    image = Image.new('RGBA', canvas_size, (0,0,0,0))
     draw = ImageDraw.Draw(image)
     
-    # NumPy配列に変換して一括処理（ここでは単純なリストでも十分高速）
-    draw.line(points, fill=line_color, width=line_width, joint="curve")
+    # 描画
+    lc = tuple(list(line_color)+[255])
+    draw.line(points, fill=lc, width=line_width, joint="curve")
 
     # 4. リサイズ
-    long_edge = max(width, height)
     offset_x = 0 if width == long_edge else (long_edge - width) // 2
     offset_y = 0 if height == long_edge else (long_edge - height) // 2
     
     image = image.resize((long_edge,long_edge))
     image = image.crop((offset_x, offset_y, offset_x + width, offset_y+height))
-    
-    return image
+
+    # 5. 背景生成＋合成
+    if p.h_img is None:
+        bg_start = rgb_random_jitter(bg_color, jitter)
+        bg_end   = rgb_random_jitter(bg_color, jitter)
+        bg = diagonal_gradient_rgb(width, height, bg_start, bg_end)
+    else:
+        bg = p.bg(width, height)
+
+    bg = bg.convert("RGBA")
+    bg.alpha_composite(image)
+
+    return bg
 
 
 if __name__ == '__main__':
