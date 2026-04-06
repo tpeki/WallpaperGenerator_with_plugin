@@ -102,6 +102,10 @@ def generate(p: Param):
     tile_size = d - joint_width
     rows = (height + d - 1) // d
     cols = (width + d - 1) // d
+    total_h = rows * d
+    total_w = cols * d
+    offset_y = (height - total_h) // 2
+    offset_x = (width - total_w) // 2
     num_colors = len(colors)
 
     # タイルごとの色インデックスを記録
@@ -130,13 +134,13 @@ def generate(p: Param):
 
     # --- 各タイルの描画 ---
     for row in range(rows):
-        y0 = row * d + joint_width // 2
+        y0 = offset_y + row*d + joint_width//2
         dy0, dy1 = max(0, y0), min(y0 + tile_size, height)
         if dy1 <= dy0: continue
         sy = slice(dy0 - y0, dy1 - y0)
 
         for col in range(cols):
-            x0 = col * d + joint_width // 2
+            x0 = offset_x + col*d + joint_width//2
             dx0, dx1 = max(0, x0), min(x0 + tile_size, width)
             if dx1 <= dx0: continue
             sx = slice(dx0 - x0, dx1 - x0)
