@@ -270,8 +270,11 @@ def generate(p: Param):
     rot_on = p.sub_jitter2 % 2 == 0  # 1なら固定、0なら回転
     rot_chick = p.sub_jitter2 & 2 == 0  # 1なら固定、0なら回転
     
+    if p.h_img is None:
+        base = make_grass((width, height), grass_color)
+    else:
+        base = p.bg()
 
-    base = make_grass((width, height), grass_color)
     egg_mask = make_egg(egg_h)
 
     grad_size = (int(egg_h * 1.5), int(egg_h * 1.5))
