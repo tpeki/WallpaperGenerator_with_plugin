@@ -318,7 +318,14 @@ def gui_main(modlist: Modules, mods, param: Param,
     wn = sg.Window('Wallpaper Factory', layout=lo)
     set_window_geom(param, wn)
 
-    modname = DEFAULT_MODULE
+    if DEFAULT_MODULE in modlist.modules:
+        modname = DEFAULT_MODULE
+    elif modlist.modules != []:
+        modname = modlist.modules[0]
+    else:
+        wn.close()
+        return
+        
     if set_module(wn, modlist, modname):
         mods[modname].default_param(param)
         param.pattern = modname
