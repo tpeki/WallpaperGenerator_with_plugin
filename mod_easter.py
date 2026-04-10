@@ -5,7 +5,7 @@ import random
 from wall_common import *
 
 OUTPUT_SIZE = (1920, 1080)
-GRASS_COLOR = (11,60,0)
+GRASS_COLOR = (31,98,0)  # XeviousGreen
 FIX_ON = 2  # 1=Egg, 2=Chick
 TILE = 180
 EGG_H = 100
@@ -13,10 +13,10 @@ CHICKS = 2  # % of colored chicks
 
 EGG_SHAPE = (0.85, 0.25)
 COLORS = [
-    (255, 96, 96),
+    (255, 96, 96),  # egg and chick colors
     (96, 112, 255),
     (240, 210, 80),
-    (60, 255, 60),
+    (60, 255, 60),  # after here for chick only
     (60, 240, 240),
     (220, 40, 40),
     (200, 96, 240),
@@ -231,8 +231,10 @@ def make_grass(size, basecolor=(17,60,0)):
     # 縦方向の筋（草感）
     x = np.linspace(0, 1, w)[None, :]
     y = np.linspace(0, 1, h)[:, None]
+    
     dx = np.cos(0.8)  #だいたい70度
     dy = np.sin(0.8)
+
     noise = np.random.rand(h, w) * 0.2
     t = x*dx + y*dy + noise
     stripes = (np.sin(t * w * 0.15) * 0.6 + 0.5)
@@ -245,16 +247,15 @@ def make_grass(size, basecolor=(17,60,0)):
     y = np.linspace(0, 1, h)[:, None]
     light = 0.8 + 0.2 * (1 - y)
     texture *= light
+    bness = 0.7 + texture*0.6
 
     # =====================
-    # 緑に変換
+    # ベースカラーに変換
     # =====================
-    r = basecolor[0] + texture * basecolor[0]
-    g = basecolor[1] + texture * basecolor[1]
-    b = basecolor[2] + texture * basecolor[2]
-
-    img = np.stack([r, g, b], axis=-1)
-
+    cmatrix = np.array(basecolor, dtype=np.float32)
+    img = cmatrix[None, None, :] * bness[..., None]
+    img = np.clip(img, 0, 255)
+    
     return Image.fromarray(img.astype(np.uint8))
 
 
