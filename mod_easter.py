@@ -5,7 +5,7 @@ import random
 from wall_common import *
 
 OUTPUT_SIZE = (1920, 1080)
-GRASS_COLOR = (31,98,0)  # XeviousGreen
+GRASS_COLOR = (31,96,0)  # XeviousGreen
 FIX_ON = 2  # 1=Egg, 2=Chick
 TILE = 180
 EGG_H = 100
@@ -216,7 +216,7 @@ def make_color_sheet(size, color, angle):
 # =========================
 # 背景芝生
 # =========================
-def make_grass(size, basecolor=(17,60,0)):
+def make_grass(size, basecolor=(31,96,0)):
     w, h = size
     
     # 低周波ノイズ（大きなムラ）
