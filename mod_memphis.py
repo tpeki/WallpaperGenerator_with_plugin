@@ -59,6 +59,7 @@ APPENDS = [
     ('penguin', None),
     ('dashpanel', None),
     ('burger', None),
+    ('flower', None),
     ]
 
 FN = {}
@@ -652,6 +653,43 @@ def burger(size: int, color: tuple):
         im = im.crop(bbox)
 
     return im
+
+@register
+def flower(size: int, petal_color: tuple):
+    COLOR_PETAL = (255, 50, 50)  # 花弁色
+    PETAL_JITTER = 40  # 花弁色のゆらぎ
+    COLOR_STAMEN = (0, 0, 0)   # 雄蕊色
+    COLOR_STEM = (50, 120, 30)  # 茎色
+    
+    def ellip(draw, c, lr, sr, colr):
+        draw.ellipse((c[0]-lr, c[1]-sr, c[0]+lr, c[1]+sr), fill=colr)
+
+    im = Image.new('RGBA', (size, size), 0)
+    dr = ImageDraw.Draw(im)
+    cx = size // 2
+    cy = size // 3
+
+    stem_center = [int(size*4/7), int(size*3/8)]
+    stem_size = [size-stem_center[0], size-stem_center[1]]
+    stem_width = size//15
+    stem_bbox = [int(stem_center[0]-stem_size[0]*2),
+             int(stem_center[1]-stem_size[1]),
+             int(stem_center[0]),
+             int(stem_center[1]+stem_size[1])]
+    dr.arc(stem_bbox, start=0, end=90, fill=COLOR_STEM, width=stem_width)
+    
+    pl = int(stem_size[0]//3)
+    ps = int(stem_center[1]//3.2)
+    dd = 1.6
+    offsets = [(-pl//dd, -ps//dd), (pl//dd, -ps//dd),
+               (-pl//1.5, ps//dd), (pl//1.5, ps//dd)]
+    for dx, dy in offsets:
+        col = rgb_random_jitter(RGBColor(petal_color), PETAL_JITTER).ctoi()
+        ellip(dr, (stem_center[0]+dx, stem_center[1]+dy), pl, ps, col)
+
+    ellip(dr, stem_center, size//12, size//12, COLOR_STAMEN)
+    return im
+
 
 # --- 描画サポート: dilation / erosion ---
 def circular_kernel(r):
