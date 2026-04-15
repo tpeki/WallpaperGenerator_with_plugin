@@ -61,6 +61,7 @@ APPENDS = [
     ('burger', None),
     ('flower', None),
     ('egg_shade', 'egg'),
+    ('footprint', 'footprint'),
     ]
 
 FN = {}
@@ -71,7 +72,7 @@ memphis_preserv = {
 
 # module基本情報
 def intro(modlist: Modules, module_name):
-    modlist.add_module(module_name, 'メンフィス (サイズ×トライ数=320程度を推奨)',
+    modlist.add_module(module_name, 'メンフィス v2',
                        {'color1':'背景色', 'color2':'背景色2',
                         'color_jitter':'彩度',
                         'pwidth':'パターンサイズ',
@@ -715,6 +716,102 @@ def egg(size, color, alpha=255):
 @register
 def egg_shade(size, color):
     return egg(size, color, alpha=160)
+
+@register
+def footprint(size, color, degree=0, left=False):
+    # ====================
+    # 基本設定
+    W, H = size, size
+    x = np.linspace(-1, 1, W)
+    y = np.linspace(-1, 1, H)
+    X, Y = np.meshgrid(x, y)
+
+    # --- 全体回転 ---
+    zeta = np.deg2rad(degree+180)
+    XR =  X * np.cos(zeta) + Y * np.sin(zeta)
+    YR = -X * np.sin(zeta) + Y * np.cos(zeta)
+
+    if left:
+        XR = -XR  # 左足
+
+    # かかと
+    a1, b1 = 0.28, 0.60
+    x1, y1 = -0.06, -0.35
+    theta = np.deg2rad(15)
+
+    Xt =  (XR - x1) * np.cos(theta) + (YR - y1) * np.sin(theta)
+    Yt = -(XR - x1) * np.sin(theta) + (YR - y1) * np.cos(theta)
+    f1 = Xt**2 / a1**2 + Yt**2 / b1**2 - 1
+
+    # 母指球
+    a2, b2 = 0.50, 0.27
+    x2, y2 = 0.10, 0.10
+    f2 = (XR - x2)**2 / a2**2 + (YR - y2)**2 / b2**2 - 1
+
+    alpha = 7.0
+    f_body = -np.log(np.exp(-alpha * f1) + np.exp(-alpha * f2)) / alpha
+
+    # 指（円弧長ベース・隙間均等）
+    toe_r_base = np.array([0.11, 0.13, 0.14, 0.16, 0.23])  # 小指→親指
+    toe_r = toe_r_base * 0.7
+
+    ang_thumb = np.deg2rad(-205)
+    ang_pinky = np.deg2rad(-325)
+
+    # 配置半径
+    R = a2 + np.max(toe_r) + 0.04
+
+    arc_len = R * (ang_thumb - ang_pinky)
+
+    toe_widths = 2 * toe_r
+    used_len = toe_widths.sum()
+    gap_arc = (arc_len - used_len) / (len(toe_r) - 1)
+
+    centers_len = []
+    pos = toe_widths[0] / 2
+    centers_len.append(pos)
+    for i in range(1, len(toe_r)):
+        pos += toe_widths[i-1] / 2 + gap_arc + toe_widths[i] / 2
+        centers_len.append(pos)
+    centers_len = np.array(centers_len)
+
+    angles = ang_thumb - centers_len / R
+
+    # 指を追加（母指球非交差）
+    gap_normal = 0.02
+    f_all = f_body.copy()
+
+    for ang, r in zip(angles, toe_r):
+        ex = x2 + a2 * np.cos(ang)
+        ey = y2 + b2 * np.sin(ang)
+
+        nx = np.cos(ang) / a2
+        ny = np.sin(ang) / b2
+        n = np.sqrt(nx*nx + ny*ny)
+        nx /= n
+        ny /= n
+
+        tx = ex + nx * (r + gap_normal)
+        ty = ey + ny * (r + gap_normal)
+
+        g = (XR - tx)**2 + (YR - ty)**2 - r**2
+        f_all = np.minimum(f_all, g)
+
+    # マスク（足跡部分）
+    mask = (f_all <= 0)
+
+    # RGBA 配列
+    rgba = np.zeros((H, W, 4), dtype=np.uint8)
+
+    rgba[mask, 0] = color[0]  # R
+    rgba[mask, 1] = color[1]  # G
+    rgba[mask, 2] = color[2]  # B
+    rgba[mask, 3] = 255   # A（不透明）
+
+    # 黒部分 → 透明（A=0 のまま）
+
+    image = Image.fromarray(rgba, mode="RGBA")
+    return image
 
 # --- 描画サポート: dilation / erosion ---
 def circular_kernel(r):
