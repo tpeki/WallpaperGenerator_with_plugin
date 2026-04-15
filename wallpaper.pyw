@@ -29,6 +29,7 @@ DEFAULT_MODULE = 'stripe'
 IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
 SAVE_NUM = 3
+PREVIEW_SIZE = (640,360)
 
 # ----
 # プラグインモジュール検索
@@ -209,7 +210,7 @@ def layout(modlist, efxlist):
                sg.Input('height', key='-height-', size=(4,1))],
               [sg.Text('',expand_x=True),
                sg.Image(key='-img-', background_color="#7f7f7f",
-                        size=(640,360), enable_events=True),
+                        size=PREVIEW_SIZE, enable_events=True),
                sg.Text('',expand_x=True)],
               [sg.Column(layout=color_column_layout),
                sg.Column(layout=jitter_column_layout),
@@ -306,6 +307,20 @@ def set_window_geom(param:Param, window: sg.Window):
                 pass
     return
 
+def set_scale_init(width, height):
+    pw, ph = PREVIEW_SIZE
+    
+    swidth = pw / width
+    sheight = ph / height
+    scale = min(swidth, sheight)
+
+    # リサイズ後の表示左上位置
+    rw, rh = int(width * scale), int(height * scale)
+    left = (rw - pw) // 2 if rw >= pw else -(pw - rw) // 2
+    top  = (rh - ph) // 2 if rh >= ph else -(ph - rh) // 2
+
+    return scale, (left, top)
+
 def gui_main(modlist: Modules, mods, param: Param,
              efxlist: EfxModules, exfs):
     '''gui_main(modlist:Modules, dict-module_funcs, p:Parameter)
@@ -364,12 +379,62 @@ def gui_main(modlist: Modules, mods, param: Param,
         if wn.is_alive():
             wn.window.after(50,loop)
 
+    def on_motion(event):
+        nonlocal mouse_x, mouse_y
+        mouse_x, mouse_y = event.x, event.y
+
+    def on_wheel(event):
+        nonlocal scale, mouse_x, mouse_y, cropos
+        # assert image.size == (param.width, param.height)
+        # print('Wheel:', scale, mouse_x, mouse_y, cropos)
+        old_scale = scale
+        scale *= 1.1 if event.delta > 0 else 0.9
+        scale = min(max(scale, 0.1), 3.0)
+
+        w,h = image.width, image.height
+        pw,ph = PREVIEW_SIZE
+        rw, rh = int(w*scale), int(h*scale)
+        if rw < pw and rh < ph:
+            scale, cropos = set_scale_init(image.width, image.height)
+            if scale != old_scale:
+                wn['-img-'].update(image)
+            return
+
+        rw0, rh0 = int(w*old_scale), int(h*old_scale)
+        left0, top0 = cropos
+
+        gx = (mouse_x + left0)/old_scale
+        gy = (mouse_y + top0)/old_scale
+        
+        prvim = image.resize((rw,rh),resample=Image.LANCZOS)
+        
+        left, top = int(gx*scale-pw/2), int(gy*scale-ph/2)
+        left = max(0, min(left, rw-pw)) if rw >= pw else -(pw - rw) // 2
+        top = max(0, min(top, rh-ph)) if rh >= ph else -(ph - rh) // 2
+        cropos = (left, top)
+
+        if rw < pw or rh < ph:
+            canvas = Image.new('RGB', PREVIEW_SIZE, '#7f7f7f')
+            x, y = (pw-rw)//2, (ph-rh)//2 
+            canvas.paste(prvim, (x,y))
+            wn['-img-'].update(canvas)
+        else:
+            prvim = prvim.crop((left, top,left+pw,top+ph))
+            wn['-img-'].update(prvim)
+
+    scale, cropos = set_scale_init(IMAGE_WIDTH, IMAGE_HEIGHT)
+    mouse_x, mouse_y = 0,0
+
+    imw = wn['-img-'].widget
+    imw.bind('<MouseWheel>', on_wheel)
+    imw.bind('<Motion>', on_motion)
+
     wn.window.after(50,loop)
 
     print('-- main loop --')
     while True:
         ev, va = wn.read()
-        #print(f'ev:{ev}, va:{va}')
+        # print(f'ev:{ev}, va:{va}')
 
         if ev == sg.WINDOW_CLOSED or ev == 'Exit' or ev == '-done-':
             break
@@ -390,6 +455,7 @@ def gui_main(modlist: Modules, mods, param: Param,
             except ValueError:
                 param.width, param.height = IMAGE_WIDTH, IMAGE_HEIGHT
             image = get_image_thread(wn, param, mods, modname)
+            scale, cropos = set_scale_init(param.width, param.height)
             if image is not None:
                 wn['-img-'].update(data=image)
             else:
@@ -404,6 +470,7 @@ def gui_main(modlist: Modules, mods, param: Param,
             set_param(wn,param, modlist.mod_gui[modname])
 
             image = get_image_thread(wn, param, mods, modname)
+            scale, cropos = set_scale_init(param.width, param.height)
             if image is not None:
                 wn['-img-'].update(data=image)
             else:
@@ -424,6 +491,7 @@ def gui_main(modlist: Modules, mods, param: Param,
                 set_param(wn, param, modlist.mod_gui[t])
                 modname = t
                 image = param.bg()
+                scale, cropos = set_scale_init(param.width, param.height)
                 wn['-img-'].update(data=image)
             continue
         elif ev in ('-color1-3', '-color2-3', '-color3-3'):
@@ -451,6 +519,7 @@ def gui_main(modlist: Modules, mods, param: Param,
                 retv = mods[modname].desc(param)
                 if isinstance(retv, Image.Image):
                     image = retv
+                    scale, cropos = set_scale_init(param.width, param.height)
                     wn['-img-'].update(data=image)
                     set_param(wn, param, modlist.mod_gui[modname])
         elif isinstance(ev, str):

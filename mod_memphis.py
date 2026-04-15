@@ -1,13 +1,11 @@
 import math
 import numpy as np
-from numpy.lib.stride_tricks import sliding_window_view
 from PIL import Image, ImageDraw
 import TkEasyGUI as sg
 from wall_common import *
 
 # --- 定数設定 ---
 PATTERN_SIZE = 80
-TRIALS = 50
 DELTA = 20
 BGCOLOR1 = (1,1,0x99)
 BGCOLOR2 = (1,1,1)
@@ -37,8 +35,6 @@ SHAPES = [
     ('square_hollow', 'square_hollow'),
     ('circle_solid', 'circle_hollow'),
     ('circle_hollow', 'circle_hollow'),
-    ('square_dot', None),
-    ('circle_lattice2', None),
     ('chevron_line', None),
     ('dot2', None),
     ]
@@ -46,6 +42,10 @@ SHAPES = [
 APPENDS = [
     ('circle_solid', 'circle_lattice'),
     ('square_solid', 'square_bias'),
+    ('square_dot', None),
+    ('square_solid', 'square_dot'),
+    ('circle_solid', 'circle_lattice2'),
+    ('circle_lattice2', None),
     ('pon_de_ring', None),
     ('donuts', None),
     ('fish', None),
@@ -60,6 +60,7 @@ APPENDS = [
     ('dashpanel', None),
     ('burger', None),
     ('flower', None),
+    ('egg_shade', 'egg'),
     ]
 
 FN = {}
@@ -73,7 +74,7 @@ def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, 'メンフィス (サイズ×トライ数=320程度を推奨)',
                        {'color1':'背景色', 'color2':'背景色2',
                         'color_jitter':'彩度',
-                        'pwidth':'パターンサイズ', 'pheight':'トライ数',
+                        'pwidth':'パターンサイズ',
                         'pdepth':'間隔'})
     return module_name
 
@@ -84,7 +85,6 @@ def default_param(p: Param):
     p.color2.itoc(*BGCOLOR2)
     p.color_jitter = TINT
     p.pwidth = PATTERN_SIZE
-    p.pheight = TRIALS
     p.pdepth = DELTA
     return p
 
@@ -582,7 +582,7 @@ def roundedsquare_mask(pos:tuple, size:int, r:int):
 
 @register
 def burger(size: int, color: tuple):
-    BNZ, BEF = '#fFB744','#ee0000'
+    BNZ, BEF = '#fFB744','#cc0011'
     LTS = '#97FF47'
     CHZ = '#FFF352'
     EGG,BCN = '#FCFCE0','#F56B9D'
@@ -652,6 +652,8 @@ def burger(size: int, color: tuple):
     if bbox:
         im = im.crop(bbox)
 
+    # 正規化
+    im = im.resize((size, size), Image.NEAREST)
     return im
 
 @register
@@ -690,6 +692,29 @@ def flower(size: int, petal_color: tuple):
     ellip(dr, stem_center, size//12, size//12, COLOR_STAMEN)
     return im
 
+@register
+def egg(size, color, alpha=255):
+    EGG_WIDTH, EGG_TAPER = (0.85, 0.25)
+    h = int(size * 0.8)
+    w = int(h * EGG_WIDTH)
+    k = EGG_TAPER
+
+    y, x = np.ogrid[-1:1:h*1j, -1:1:w*1j]
+    sx = 1 - k * (1 - y) / 2
+    mask = ((x / sx)**2 + y**2) <= 1
+
+    rgba = np.zeros((h, h, 4), dtype=np.uint8)
+    
+    left = (h - w) // 2
+    right = left + w
+    rgba[:, left:right, :3][mask] = color
+    rgba[:, left:right, 3][mask] = alpha    
+
+    return Image.fromarray(rgba, mode='RGBA')
+
+@register
+def egg_shade(size, color):
+    return egg(size, color, alpha=160)
 
 # --- 描画サポート: dilation / erosion ---
 def circular_kernel(r):
@@ -842,192 +867,213 @@ def desc(p: Param):
 # ----
 # 画像生成
 # ----
-def dilate(mask: np.ndarray, delta: int):
-    # mask: bool 2D  delta幅の縁取りをつける(余白)
-    k = 2 * delta + 1
-    padded = np.pad(mask.astype(np.uint8), delta)
-    H, W = mask.shape
+def poisson_variable(w, h, r_min, r_max, k=16):
+    import math
+    rng = np.random.default_rng()
 
-    # 2D 畳み込みを einsum で高速化
-    # 近傍の合計が 0 でなければ True
-    out = np.zeros_like(mask, dtype=bool)
-    for y in range(H):
-        block = padded[y:y+k]  # (k, W+k-1)
-        # block と kernel の畳み込みを行方向にまとめて計算
-        s = np.convolve(block.sum(axis=0),
-                        np.ones(k, dtype=np.uint8), mode='valid')
-        out[y] = s > 0
-    return out
+    cell = r_min / math.sqrt(2)
+    gw = int(w / cell) + 1
+    gh = int(h / cell) + 1
+    grid = [[[] for _ in range(gh)] for _ in range(gw)]
 
+    def gcoord(x, y):
+        return int(x/cell), int(y/cell)
 
-def slidewin(matrix, radius):
-    # 元配列の周囲に0で埋めた領域を足して配列の端で破綻しないようにする
-    P = np.pad(matrix, pad_width=radius//2, mode='constant', constant_values=0)
-    # スライディングウィンドウで近傍をくくる
-    win = sliding_window_view(P, (radius,radius))
-    # winは、Pの各セルに対応する [r,r] の配列の配列 [w,h,r,r] 
-    # 各r,r のsumを取る → [w,h] の配列になる
-    S = win.sum(axis=(2,3))
+    def rand_r():
+        return rng.uniform(r_min, r_max)
 
-    return S
+    samples = []
+    active = []
+
+    # 初期点を複数（重要：中央寄り防止）
+    for _ in range(20):
+        x = rng.uniform(0, w)
+        y = rng.uniform(0, h)
+        r = rand_r()
+        p = (x, y, r)
+        samples.append(p)
+        active.append(p)
+        gx, gy = gcoord(x, y)
+        grid[gx][gy].append(p)
+
+    while active:
+        idx = rng.integers(len(active))
+        bx, by, br = active[idx]
+
+        found = False
+        for _ in range(k):
+            r_new = rand_r()
+            dist = rng.uniform(br + r_new, (br + r_new) * 1.4)
+            ang = rng.random() * 2*np.pi
+
+            px = bx + dist * math.cos(ang)
+            py = by + dist * math.sin(ang)
+
+            if not (0 <= px < w and 0 <= py < h):
+                continue
+
+            gx, gy = gcoord(px, py)
+
+            ok = True
+            for ix in range(max(0, gx-1), min(gw, gx+2)):
+                for iy in range(max(0, gy-1), min(gh, gy+2)):
+                    for (qx, qy, qr) in grid[ix][iy]:
+                        dx = px - qx
+                        dy = py - qy
+                        if dx*dx + dy*dy < (r_new + qr)**2:
+                            ok = False
+                            break
+                    if not ok:
+                        break
+                if not ok:
+                    break
+
+            if ok:
+                newp = (px, py, r_new)
+                samples.append(newp)
+                active.append(newp)
+                grid[gx][gy].append(newp)
+                found = True
+                break
+
+        if not found:
+            active.pop(idx)
+
+    return samples
+
 
 def generate(p: Param):
-    ow, oh = p.width, p.height
-    pat_size_min = p.pwidth*AA
-    pat_size_max = int(pat_size_min * 1.3)
-    shift = pat_size_min // 3
-    delta = p.pdepth*AA
-    num = p.pheight
-    tint = p.color_jitter
-    w, h = int(ow+p.pwidth*1.3+p.pdepth*3)*AA,\
-           int(oh+p.pwidth*1.3+p.pdepth*3)*AA
-    
-    retry_count = ABANDON
-    colors = COLORS
-    color_num = len(colors)
+    import math
 
-    # shapesは文字列なので、実際には FN[name]()で呼出し
+    ow, oh = p.width, p.height
+    pat_size_min = p.pwidth * AA
+    pat_size_max = int(pat_size_min * 1.3)
+    tint = p.color_jitter
+    delta = p.pdepth * 4 * AA
+
+    # =========================
+    # キャンバス
+    # =========================
+    margin = int(pat_size_max * 2)
+
+    w = int(ow * AA + margin * 2)
+    h = int(oh * AA + margin * 2)
+
+    base = Image.new('RGBA', (w, h), 0)
+
+    rng = np.random.default_rng()
+
+    # =========================
+    # shape準備
+    # =========================
     if len(memphis_preserv['shapes']) == 0:
         memphis_preserv['shapes'].extend(SHAPES)
     shapes = memphis_preserv['shapes']
-    shape_num = len(shapes)
-    
-    base = Image.new('RGBA', (w,h), color=0)
+    colors = COLORS
 
-    # 占有マップ(grid)
-    grid_w = w // (pat_size_min + delta)
-    grid_h = h // (pat_size_min + delta)
+    # =========================
+    # 可変半径（重要）
+    # =========================
+    r_min = (pat_size_min) * 0.8
+    r_max = (pat_size_max) * 1.1
 
-    occ = np.zeros((h, w), dtype=bool)  # 占有マップ(bitmap)
-    gocc = np.zeros((grid_w,grid_h),dtype=bool)
+    points = poisson_variable(w, h, r_min, r_max)
 
-    rng = np.random.default_rng()
-    rmap = rng.random((num,8))
-    pat_diff = pat_size_max-pat_size_min
-    
-    for x in range(num):
-        if (x%10) == 0:
-            print(f'{int((num-x)/10)} ', end='')
-        
-        S = slidewin(gocc, 5)
-        mask = (gocc == 0)
-        if not mask.any():
-            print('\nAll cells are occupied.  ', end='')
-            break
+    # =========================
+    # 描画
+    # =========================
+    placed = []  # (cx, cy, r)
 
-        # 重み付け配置
-        weights = np.zeros_like(S, dtype=float)
-        weights[mask] = 1/(S[mask] + 1)+0.1
-        prob = weights/weights.sum()
+    for (px, py, r_local) in points:
 
-        # 偏差配置
-        #mean = S[mask].mean()
-        #std = S[mask].std()
-        #if std == 0:
-        #    T = np.full_like(S, 50, dtype=float)
-        #else:
-        #    T = np.zeros_like(S, dtype=float)
-        #    T[mask] = 50 + 10*(S[mask]-mean)/std
-        #    
-        #prob = (T.max() - T) + 1
-        #prob[~mask] = 0
-        #prob = prob/prob.sum()
+        # jitter（軽く）
+        j = r_local * 0.3
+        px += rng.uniform(-j, j)
+        py += rng.uniform(-j, j)
 
-        prob_flat = prob.ravel()
-        idx_flat = np.random.choice(len(prob_flat), p=prob_flat)
-        px, py = divmod(idx_flat,grid_h)
-        gocc[px, py] = 1
+        s = int(r_local)  # 半径からサイズへ
 
-        px = px*(pat_size_min+delta) + int(rmap[x][1]*delta*3 - delta*1.5)
-        py = py*(pat_size_min+delta) + int(rmap[x][2]*delta*3 - delta*1.5)
+        pa = rng.random() * 2*np.pi
 
-        s = int(rmap[x][0]*pat_diff+pat_size_min)
-        pa = rmap[x][3] * np.pi * 2
-        ps = shapes[int(rmap[x][4]*shape_num)]
-        sc = rmap[x][5]*0.3+0.7
-        pc = int(rmap[x][6]*color_num)
-        pc2 = (pc+int(rmap[x][7]*color_num)) % color_num
-        if pc2 == pc:
-            pc2 = (pc2+1) % color_num
+        ps = shapes[rng.integers(len(shapes))]
+        pc = rng.integers(len(colors))
+        pc2 = (pc + rng.integers(1, len(colors))) % len(colors)
 
-        offset = np.array([0, shift])  # ローカル座標
-        R = np.array([[np.cos(pa), -np.sin(pa)],
-                      [np.sin(pa), np.cos(pa)]])
-        ox, oy = R @ offset
+        imgs = []
 
-        pat1 = FN[ps[0]](int(s*sc), colors[pc])
+        # pat1
+        pat1 = FN[ps[0]](s, colors[pc])
         pat1 = pat1.rotate(np.rad2deg(pa), expand=True)
-        p1w, p1h = pat1.size
-        p1x = px - p1w//2
-        p1y = py - p1h//2
-        alpha1 = np.array(pat1.split()[3]) > 0
-        alpha1_d = dilate(alpha1, delta)  # 占有範囲
+        imgs.append((pat1, 0, 0))
 
-        y10,y11 = p1y, p1y+p1h
-        x10, x11 = p1x, p1x+p1w
-
+        # pat2
         if ps[1] is not None:
+            shift = pat_size_min // 3
+            ox = shift * math.cos(pa + math.pi/2)
+            oy = shift * math.sin(pa + math.pi/2)
+
             pat2 = FN[ps[1]](s, colors[pc2])
             pat2 = pat2.rotate(np.rad2deg(pa), expand=True)
-            p2w, p2h = pat2.size
-            p2x = int(px+ox - p2w/2)
-            p2y = int(py+oy - p2h/2)
-            alpha2 = np.array(pat2.split()[3]) > 0
-            alpha2_d = dilate(alpha2, delta)  # 占有範囲
+            imgs.append((pat2, ox, oy))
 
-            y20, y21 = p2y, p2y+p2h
-            x20, x21 = p2x, p2x+p2w
-        else:
-            pat2 = None
+        # =========================
+        # 円衝突判定用半径
+        # =========================
+        max_w = 0
+        max_h = 0
+        for im, _, _ in imgs:
+            w0, h0 = im.size
+            max_w = max(max_w, w0)
+            max_h = max(max_h, h0)
 
-        if y10 < 0 or x10 < 0 or y11 > h or x11 > w:
+        r = max(max_w, max_h) * 0.5  # 少し縮める
+
+        # =========================
+        # 衝突チェック
+        # =========================
+        hit = False
+        for (qx, qy, qr) in placed:
+            dx = px - qx
+            dy = py - qy
+            if dx*dx + dy*dy < (r + qr + delta)**2:
+                hit = True
+                break
+
+        if hit:
             continue
-        try:
-            if np.any(occ[y10:y11, x10:x11] & alpha1_d):
-                continue
-        except ValueError:
-            # Broadcast Error -> ignore
-            continue
-        
-        if ps[1] is not None:
-            if y20 < 0 or x20 < 0 or y21 > h or x21 > w:
-                continue
-            try:
-                if np.any(occ[y20:y21, x20:x21] & alpha2_d):
-                    continue
-            except ValueError:
-                # Broadcast Error -> ignore
-                continue
-                
-        base.paste(pat1, (p1x,p1y), pat1)
-        try:
-            occ[y10:y11, x10:x11] |= alpha1_d
-        except ValueError:
-            # Broadcast Error -> ignore
-            pass
 
-        if ps[1] is not None:
-            base.paste(pat2, (p2x,p2y), pat2)
-            try:
-                occ[y20:y21, x20:x21] |= alpha2_d
-            except ValueError:
-                # Broadcast Error -> ignore
-                pass
+        # =========================
+        # 描画
+        # =========================
+        for im, ox, oy in imgs:
+            w0, h0 = im.size
+            x = int(px + ox - w0/2)
+            y = int(py + oy - h0/2)
+            base.paste(im, (x, y), im)
 
-    print('Done.')
+        placed.append((px, py, r))
+
+    print(f"points={len(points)}, placed={len(placed)}")
+
+    # =========================
+    # 後処理
+    # =========================
     base = base.resize((w//AA, h//AA), resample=Image.LANCZOS)
-    ofsx, ofsy = int((w/AA-ow)/2), int((h/AA-oh)/2)
-    base = base.crop((ofsx,ofsy,ow+ofsx, oh+ofsy))
+
+    ofsx = int((w//AA - ow)/2)
+    ofsy = int((h//AA - oh)/2)
+    base = base.crop((ofsx, ofsy, ofsx+ow, ofsy+oh))
+
     base = sat_attenate(base, tint)
 
     if p.h_img is None:
         img = vertical_gradient_rgb(ow, oh, p.color1, p.color2)
     else:
         img = p.bg(ow, oh)
-        
-    img.paste(base, (0,0), base)
 
+    img.paste(base, (0, 0), base)
     return img
+
 
 if __name__ == '__main__':
     p = Param()
