@@ -34,7 +34,7 @@ DEFAULT_WEIGHTS = [
     ["mesh",        'n1', 0.1],
     ["half_stripe", 'n',  0.1],
     ["stripe",      'n2', 0.1],
-    ["circle",      'n1', 9.1],
+    ["quarter_rings",'n', 0.02],
 ]
 
 FN = {}
@@ -85,11 +85,6 @@ def triangle(x, y, S):
     return y >= x
 
 @register
-def circle(x, y, S):
-    r = S // 2
-    return ((x-r)**2 + (y-r)**2 <= r**2)
-
-@register
 def dbl_triangle(x, y, S):
     h = S // 2
     top = (y <= h) & (np.abs(x - h) <= y)
@@ -113,6 +108,15 @@ def half_dbl(x, y, S):
 @register
 def quarter(x, y, S):
     return (x**2 + y**2 <= S**2)
+
+@register
+def quarter_rings(x, y, S):
+    w = S // 10
+    r = np.sqrt(x**2 + y**2)
+
+    band = (r // w).astype(int)
+
+    return (band % 2 == 1) & (band < 10)
 
 @register
 def quad_quarter(x, y, S):
@@ -273,18 +277,23 @@ def desc(p: Param):
 
     inum = len(lines)
     ilist = []
-    row = 8
-    for v in range((inum+row-1)//row):  # 1かラムrow行
+    maxrow = 8
+    cols = (inum+maxrow-1)//maxrow
+    if cols > 4:
+        cols = 4
+    rows = (inum+cols-1)//cols
+    for v in range(cols):  # 1かラムrow行
         clayout = [[sg.Text('Mask Name', size=(14,1)),
                      sg.Text('Flag', size=(6,1)),
                      sg.Text('Prob.', size=(6,1))],]
-        for w in range(row):
-            k = v*row + w
+        for w in range(rows):
+            k = v*rows + w
             if k >= inum:
                 break
             clayout.append(lines[k])
             
-        ilist.append(sg.Column(layout=clayout, vertical_alignment='top'))
+        ilist.append(sg.Column(layout=clayout, vertical_alignment='top',
+                               expand_y=True))
         #print(clayout)
         
     lo = [[sg.Text('Bauhaus風テキスタイル：タイルリスト')],

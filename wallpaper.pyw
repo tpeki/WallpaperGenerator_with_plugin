@@ -12,7 +12,7 @@ v2.0.3 2026/01/05 Save asダイアログを表示するようにした。
 '''
 
 import importlib.util as impl
-from io import StringIO
+from io import StringIO, BytesIO
 import sys
 import os.path as pa
 import argparse
@@ -321,6 +321,34 @@ def set_scale_init(width, height):
 
     return scale, (left, top)
 
+def render_preview(image, scale, cropos):
+    w, h = image.size
+    pw, ph = PREVIEW_SIZE
+
+    rw, rh = int(w * scale), int(h * scale)
+    
+    prvim = image.resize((rw, rh), Image.LANCZOS)
+    left, top = cropos
+    
+    if rw < pw or rh < ph:  # どちらかの辺が短ければセンタリング
+        canvas = Image.new('RGB', PREVIEW_SIZE, '#7f7f7f')
+        x = (pw - rw) // 2
+        y = (ph - rh) // 2
+        canvas.paste(prvim, (x, y))
+        return canvas
+    else:  # 大きければcrop
+        return prvim.crop((left, top, left + pw, top + ph))
+
+
+def update_image(window, key, image):
+    bio = BytesIO()
+    image.save(bio, format='PNG')
+    data = bio.getvalue()
+
+    window._img_bytes = data
+    window[key].update(data=data)
+
+
 def gui_main(modlist: Modules, mods, param: Param,
              efxlist: EfxModules, exfs):
     '''gui_main(modlist:Modules, dict-module_funcs, p:Parameter)
@@ -347,14 +375,17 @@ def gui_main(modlist: Modules, mods, param: Param,
         set_param(wn, param, modlist.mod_gui[modname])
 
     image = mods[modname].generate(param)
-    wn['-img-'].update(data=image)
+    scale, cropos = set_scale_init(param.width, param.height)
+    preview = render_preview(image, scale, cropos)
+    
+    update_image(wn, '-img-', preview)
     wn['-width-'].update(param.width)
     wn['-height-'].update(param.height)
 
     def on_click(event):
         # print('onclick')
         x,y = event.x, event.y
-        if 0 <= x < image.width and 0 <= y < image.height:
+        if 0 <= x < PREVIEW_SIZE[0] and 0 <= y < PREVIEW_SIZE[1]:
             pick_color['pos'] = (x,y)
             pick_color['c'] = image.getpixel((x,y))
             wgt.unbind('<Button-1>')
@@ -364,14 +395,18 @@ def gui_main(modlist: Modules, mods, param: Param,
             # print('loop', pick_color['e'])
             if wn[pick_color['e']].get() == '?':
                 x,y = pick_color['pos']
-                dw,dh = wn['-img-'].size
-                iw,ih = image.size
-                new_color = image.getpixel((x/dw*iw,y/dh*ih))
-                setattr(param, pick_color['e'][1:-2], RGBColor(new_color[0:3]))
-                fg,bg = bg_and_font(new_color[0:3])
-                r,g,b = to_rgb(bg)
-                wn[pick_color['e'][:-1]+'1'].update(f'{r},{g},{b}',text_color=fg,
-                                           background=bg)
+                gx = int((x + cropos[0]) / scale)
+                gy = int((y + cropos[1]) / scale)
+                if 0<=gx<image.width and 0<=gy<image.height:
+                    new_color = image.getpixel((gx,gy))
+                    
+                    setattr(param, pick_color['e'][1:-2],
+                            RGBColor(new_color[0:3]))
+                    fg,bg = bg_and_font(new_color[0:3])
+                    r,g,b = to_rgb(bg)
+                    wn[pick_color['e'][:-1]+'1'].update(f'{r},{g},{b}',
+                                                        text_color=fg,
+                                                        background=bg)
             pick_color['c'] = None
             wgt = wn['-img-'].widget
             wgt.unbind('<Button-1>')
@@ -385,8 +420,6 @@ def gui_main(modlist: Modules, mods, param: Param,
 
     def on_wheel(event):
         nonlocal scale, mouse_x, mouse_y, cropos
-        # assert image.size == (param.width, param.height)
-        # print('Wheel:', scale, mouse_x, mouse_y, cropos)
         old_scale = scale
         scale *= 1.1 if event.delta > 0 else 0.9
         scale = min(max(scale, 0.1), 3.0)
@@ -397,34 +430,22 @@ def gui_main(modlist: Modules, mods, param: Param,
         if rw < pw and rh < ph:
             scale, cropos = set_scale_init(image.width, image.height)
             if scale != old_scale:
-                wn['-img-'].update(image)
+                preview = render_preview(image, scale, cropos)
+                update_image(wn, '-img-', preview)
             return
 
-        rw0, rh0 = int(w*old_scale), int(h*old_scale)
         left0, top0 = cropos
-
         gx = (mouse_x + left0)/old_scale
         gy = (mouse_y + top0)/old_scale
-        
-        prvim = image.resize((rw,rh),resample=Image.LANCZOS)
         
         left, top = int(gx*scale-pw/2), int(gy*scale-ph/2)
         left = max(0, min(left, rw-pw)) if rw >= pw else -(pw - rw) // 2
         top = max(0, min(top, rh-ph)) if rh >= ph else -(ph - rh) // 2
         cropos = (left, top)
+        preview = render_preview(image, scale, cropos)
+        update_image(wn, '-img-', preview)
 
-        if rw < pw or rh < ph:
-            canvas = Image.new('RGB', PREVIEW_SIZE, '#7f7f7f')
-            x, y = (pw-rw)//2, (ph-rh)//2 
-            canvas.paste(prvim, (x,y))
-            wn['-img-'].update(canvas)
-        else:
-            prvim = prvim.crop((left, top,left+pw,top+ph))
-            wn['-img-'].update(prvim)
-
-    scale, cropos = set_scale_init(IMAGE_WIDTH, IMAGE_HEIGHT)
     mouse_x, mouse_y = 0,0
-
     imw = wn['-img-'].widget
     imw.bind('<MouseWheel>', on_wheel)
     imw.bind('<Motion>', on_motion)
@@ -439,7 +460,6 @@ def gui_main(modlist: Modules, mods, param: Param,
         if ev == sg.WINDOW_CLOSED or ev == 'Exit' or ev == '-done-':
             break
         elif ev == 'Save' or ev == '-ok-':
-            base=param.pattern
             fname = pa.basename(param.file_name())
             fname = get_savefile(fname)
             if fname == '':
@@ -450,14 +470,20 @@ def gui_main(modlist: Modules, mods, param: Param,
             continue
         elif ev == '-redo-':
             try:
-                param.width = int(va['-width-'])
-                param.height = int(va['-height-'])
+                w = int(va['-width-'])
+                h = int(va['-height-'])
             except ValueError:
-                param.width, param.height = IMAGE_WIDTH, IMAGE_HEIGHT
+                w, h = IMAGE_WIDTH, IMAGE_HEIGHT
+
+            wn['-width-'].update(w)
+            wn['-height-'].update(h)
+            
+            param.width, param.height = w, h
             image = get_image_thread(wn, param, mods, modname)
-            scale, cropos = set_scale_init(param.width, param.height)
+            scale, cropos = set_scale_init(w, h)
             if image is not None:
-                wn['-img-'].update(data=image)
+                preview = render_preview(image, scale, cropos)
+                update_image(wn, '-img-', preview)
             else:
                 print("DON'T CLOSE DIALOGUE")
             continue
@@ -472,7 +498,8 @@ def gui_main(modlist: Modules, mods, param: Param,
             image = get_image_thread(wn, param, mods, modname)
             scale, cropos = set_scale_init(param.width, param.height)
             if image is not None:
-                wn['-img-'].update(data=image)
+                preview = render_preview(image, scale, cropos)
+                update_image(wn, '-img-', preview)
             else:
                 print("DON'T CLOSE DIALOGUE")
             continue
@@ -492,7 +519,8 @@ def gui_main(modlist: Modules, mods, param: Param,
                 modname = t
                 image = param.bg()
                 scale, cropos = set_scale_init(param.width, param.height)
-                wn['-img-'].update(data=image)
+                preview = render_preview(image, scale, cropos)
+                update_image(wn, '-img-', preview)
             continue
         elif ev in ('-color1-3', '-color2-3', '-color3-3'):
             wgt = wn['-img-'].widget
@@ -520,7 +548,8 @@ def gui_main(modlist: Modules, mods, param: Param,
                 if isinstance(retv, Image.Image):
                     image = retv
                     scale, cropos = set_scale_init(param.width, param.height)
-                    wn['-img-'].update(data=image)
+                    preview = render_preview(image, scale, cropos)
+                    update_image(wn, '-img-', preview)
                     set_param(wn, param, modlist.mod_gui[modname])
         elif isinstance(ev, str):
             widg = ev[1:-2]
