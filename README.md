@@ -60,6 +60,7 @@ usage: wallpaper.pyw [-h] [- plugin_dir PLUGI _DIR] [--list_mod les] [--module
 
  　　壁紙パターンをmod_*.py で追加できます
 
+- bauhaus: バウハウス風
 - bias: 斜め帯
 - chevron: ギザギザボーダー
 - dune: 砂丘？
