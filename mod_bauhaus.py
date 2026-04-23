@@ -28,13 +28,18 @@ DEFAULT_WEIGHTS = [
     ["haxa_circle", 'r',  0.02],
     ["ring",        'r1', 0.1],
     ["dbl_ring",    'r1', 0.1],
-    ["triangle",    'n',  1.0],
+    ["half_triangl",'n',  1.0],
     ['dbl_triangle','r',  0.5],
-    ["box",         'n',  0.3],
+    ["half_box",    'n',  0.3],
     ["mesh",        'n1', 0.1],
     ["half_stripe", 'n',  0.1],
     ["stripe",      'n2', 0.1],
     ["quarter_rings",'n', 0.02],
+    ["plate",        'r', 0.0],
+    ["triangle",     'r', 0.1],
+    ["box",          'r1', 0.05],
+    ["cross",        'r1', 0.05],
+    ["kamon",        'r1', 0.0],
 ]
 
 FN = {}
@@ -81,8 +86,14 @@ def register(func):
     return func
 
 @register
-def triangle(x, y, S):
+def half_triangl(x, y, S):
     return y >= x
+
+@register
+def plate(x, y, S):
+    h = S//4
+    edge = (x<h)|(S-h<x)|(y<h)|(S-h<y)
+    return (y >= x) ^ edge
 
 @register
 def dbl_triangle(x, y, S):
@@ -177,7 +188,7 @@ def dbl_ring(x, y, S):
     return (dist <= r_out**2) ^ (dist <= r_mid**2) ^ (dist <= r_inn**2)
 
 @register
-def box(x, y, S):
+def half_box(x, y, S):
     return (x < S//2)
 
 @register
@@ -194,6 +205,143 @@ def half_stripe(x, y, S):
 def stripe(x, y, S):
     sw = S//8
     return (x % (2*sw)) < sw
+
+@register
+def triangle(x, y, S):
+    width = S//5
+    half = S//2
+    angle = np.deg2rad(65) # np.pi/3 # 正三角形
+    incl = np.sin(angle)*2 
+    wh = width/np.cos(angle)  # 法線方向にwidthを取るのでy切片はcos(60)で割る
+    rh = S*incl
+    d = 0  # (S-rh/2)//2  # 余白マージンを取ってセンタリング
+    left = (incl*x-wh+d<= y) & (y <= incl*x+d) & (x<=half) & (d<=y)
+    right = (-incl*x+rh-wh+d <= y) & (y <= -incl*x+rh+d) & (half<=x) & (d<=y)
+    bottom = (d<=y) & (y<=width+d) & ((width+d)/2<x) & (x<S-(width+d)/2)
+    return left | right | bottom
+
+@register
+def box(x, y, S):
+    width = S//4
+    d = 0  # S//8 # 余白マージン
+    l = (d<=x) & (x<=width+d) & (d<y) & (y<S-d)
+    r = (S-d-width<=x) & (x<=S-d) & (d<y) & (y<S-d)
+    b = (d<=y) & (y<=width+d) & (d<x) & (x<S-d)
+    u = (S-d-width<=y) & (y<=S-d) & (d<x) & (x<S-d)
+    return l|r|u|b
+
+@register
+def cross(x, y, S):
+    w = S // 6
+    band1 = np.abs(y - x) <= w  # 45°
+    band2 = np.abs(y + x - S) <= w  # -45°
+    return band1 | band2
+
+@register
+def kamon(x, y, S):
+    """丸に違い鷹の羽の家紋 0: 背景, 1: 家紋
+    x,yは使用しません
+    """
+    img = Image.new('L', (S, S), 0)
+    
+    c = S // 2
+    margin = S // 50
+    radius = c - margin
+    base_width = max(2, S // 100) # 基本となる線の太さ
+    
+    #外枠の丸
+    dr = ImageDraw.Draw(img)
+    outcircle_width = max(base_width, S//10)
+    dr.ellipse((c-radius, c-radius, c+radius, c+radius),
+        outline=255, width=outcircle_width)
+
+    # 羽根
+    def draw_feather_mask(S, angle, outline=False):
+        feather = Image.new('L', (S, S), 0)
+        f_dr = ImageDraw.Draw(feather)
+
+        cx = S//2
+        cy = S*3//10
+        f_radius = S//5
+        f_length = f_radius*2
+        ly = cy+f_length
+        
+        # fill body
+        f_dr.pieslice((cx-f_radius, cy-f_radius, cx+f_radius, cy+f_radius),
+                 start=180, end=360, fill=255)
+        f_dr.pieslice((cx-f_radius, ly-f_radius, cx+f_radius, ly+f_radius),
+                 start=0, end=180, fill=255)
+        f_dr.rectangle((cx-f_radius, cy, cx+f_radius, ly), fill=255)
+        # outline
+        if outline:
+            f_dr.arc((cx-f_radius, cy-f_radius, cx+f_radius, cy+f_radius),
+                     start=180, end=360, fill=255, width=base_width*2)
+            f_dr.arc((cx-f_radius, ly-f_radius, cx+f_radius, ly+f_radius),
+                     start=0, end=180, fill=255, width=base_width*2)
+            f_dr.line((cx-f_radius, cy, cx-f_radius, ly),
+                      width=base_width*2, fill=255)
+            f_dr.line((cx+f_radius, cy, cx+f_radius, ly),
+                      width=base_width*2, fill=255)
+
+        rotated = feather.rotate(angle, resample=Image.BICUBIC, center=(cx, cx))
+        return rotated
+    
+    def draw_single_feather(S, angle):
+        # 羽根単体
+        feather = draw_feather_mask(S, 0)
+        f_dr = ImageDraw.Draw(feather)
+        
+        cx = S//2
+        cy = S*3//10
+        f_radius = S//5
+        f_length = f_radius*2
+        ly = cy+f_length
+        
+        # feather line
+        sy = cy - f_radius + f_radius//8
+        ey = sy + S//5
+        dy = f_radius//10*18
+        step = S//20
+        for d in range(3):
+            f_dr.line((cx-f_radius, sy+d*step, cx, ey+d*step),
+                      width=base_width, fill=0)
+            f_dr.line((cx-f_radius, sy+dy+d*step, cx, ey+dy+d*step),
+                      width=base_width, fill=0)
+            f_dr.line((cx+f_radius, sy+d*step, cx, ey+d*step),
+                      width=base_width, fill=0)
+            f_dr.line((cx+f_radius, sy+dy+d*step, cx, ey+dy+d*step),
+                      width=base_width, fill=0)
+        dy = base_width*4
+        f_dr.arc((cx-f_radius, ly-f_radius-dy, cx+f_radius, ly+f_radius-dy),
+                 start=0, end=180, fill=0, width=base_width)
+        dx = base_width*2
+        f_dr.line((cx, cy-f_radius, cx, ly+f_radius),
+                      width=base_width*5, fill=255)
+        f_dr.line((cx-dx, cy-f_radius, cx-dx, ly+f_radius),
+                      width=base_width, fill=0)
+        f_dr.line((cx+dx, cy-f_radius, cx+dx, ly+f_radius),
+                      width=base_width, fill=0)
+        
+        # rotate
+        rotated = feather.rotate(angle, resample=Image.BICUBIC, center=(cx, cx))
+        return rotated
+
+    # 重ね合わせ
+    feather_size = int(S*0.94)
+    feather_top = draw_single_feather(feather_size, -45)
+    feather_top_m = draw_feather_mask(feather_size, -45, outline=True)
+    feather_bottom = draw_single_feather(feather_size, 45)
+
+    df = (S-feather_size)//2
+    img.paste(255, (df, df), feather_bottom)
+    img.paste(0, (df, df), feather_top_m)
+    img.paste(255, (df, df), feather_top)
+
+    # --- 二値配列化 ---
+    kamon_array = np.array(img)
+    kamon_array = (kamon_array > 127).astype(np.uint8) # 閾値を中央に
+    
+    return kamon_array
 
 
 # =========================
