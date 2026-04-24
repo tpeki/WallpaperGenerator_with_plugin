@@ -18,33 +18,47 @@ BGCOLOR = (190, 195, 190)
 
 DEFAULT_WEIGHTS = [
     # Name,         reverse_flag,   probability
-    ["half_circle", 'r2', 0.8],
+    ['half_circle', 'r2', 0.8],
     ['half_dbl',    'r',  0.1],
-    ["quarter",     'r',  1.0],
-    ["quad_quarter",'r',  0.05],
-    ["leaf",        'r2', 0.2],
-    ["dbl_circle",  'r',  0.1],
-    ["quad_circle", 'r',  0.05],
-    ["haxa_circle", 'r',  0.02],
-    ["ring",        'r1', 0.1],
-    ["dbl_ring",    'r1', 0.1],
-    ["half_triangl",'n',  1.0],
-    ['dbl_triangle','r',  0.5],
-    ["half_box",    'n',  0.3],
-    ["mesh",        'n1', 0.1],
-    ["half_stripe", 'n',  0.1],
-    ["stripe",      'n2', 0.1],
-    ["quarter_rings",'n', 0.02],
-    ["plate",        'r', 0.0],
-    ["triangle",     'r', 0.1],
-    ["box",          'r1', 0.05],
-    ["cross",        'r1', 0.05],
-    ["kamon",        'r1', 0.0],
+    ['quarter',     'r',  1.0],
+    ['quad_quarter','r',  0.05],
+    ['leaf',        'r2', 0.2],
+    ['circle',      'r1', 0.0],
+    ['dbl_circle',  'r',  0.1],
+    ['quad_circle', 'r',  0.01],
+    ['tri_circle',  'r',  0.02],
+    ['mini_circle', 'r',  0.0],
+    ['haxa_circle', 'r',  0.02],
+    ['ring',        'r1', 0.1],
+    ['dbl_ring',    'r1', 0.1],
+    ['half_triangl','n',  1.0],
+    ['dbl_triangle','r',  0.2],
+    ['square',      'n',  0.0],
+    ['half_box',    'n',  0.2],
+    ['half_half',   'n',  0.2],
+    ['bar',         'na', 0.03],
+    ['mesh',        'n1', 0.2],
+    ['half_stripe', 'n',  0.1],
+    ['stripe',      'n2', 0.1],
+    ['pinstripe',   'n2a',0.0],
+    ['quarter_rings','n', 0.02],
+    ['inset_square','r',  0.0],
+    ['triangle',    'r',  0.0],
+    ['box',         'n1', 0.05],
+    ['cross',       'r1', 0.0],
+    ['kamon',       'r1', 0.0],
 ]
+
+OVERWRITES = {
+    'dbl_ring': 'circle',
+    'quarter_rings': 'quarter',
+    'mesh': 'square',
+    'tri_circle': 'mini_circle', 
+    }
 
 FN = {}
 
-bauhaus_preserv = {}
+bauhaus_preserv = {'overwrite':True}
 
 # module基本情報
 def intro(modlist: Modules, module_name):
@@ -90,7 +104,7 @@ def half_triangl(x, y, S):
     return y >= x
 
 @register
-def plate(x, y, S):
+def inset_square(x, y, S):
     h = S//4
     edge = (x<h)|(S-h<x)|(y<h)|(S-h<y)
     return (y >= x) ^ edge
@@ -159,6 +173,20 @@ def quad_circle(x, y, S):
     return q1 | q2 | q3 | q4
 
 @register
+def tri_circle(x, y, S):
+    r = S // 4
+    q1 = (x - S//4)**2 + (y - S//4)**2 <= r**2
+    q2 = (x - S//4)**2 + (y - 3*S//4)**2 <= r**2
+    q3 = (x - 3*S//4)**2 + (y - S//4)**2 <= r**2
+    return q1 | q2 | q3
+
+@register
+def mini_circle(x, y, S):
+    r = S // 4
+    q4 = (x - 3*S//4)**2 + (y - 3*S//4)**2 <= r**2
+    return q4
+
+@register
 def haxa_circle(x, y, S):
     r = S // 8
     q = np.zeros((S,S), dtype=bool)
@@ -169,6 +197,11 @@ def haxa_circle(x, y, S):
         cy = (c // 4) * step + offset
         q |= (x - cx)**2 + (y - cy)**2 <= r**2
     return q
+
+@register
+def circle(x, y, S):
+    r = S // 2
+    return ((x - r)**2 + (y - r)**2 <= r**2)
 
 @register
 def ring(x, y, S):
@@ -188,8 +221,20 @@ def dbl_ring(x, y, S):
     return (dist <= r_out**2) ^ (dist <= r_mid**2) ^ (dist <= r_inn**2)
 
 @register
+def square(x, y, S):
+    return (x%2 < 1)
+
+@register
 def half_box(x, y, S):
     return (x < S//2)
+
+@register
+def half_half(x, y, S):
+    return (x < S//2)^(y < S//2)
+
+@register
+def bar(x, y, S):
+    return (x < S//4)
 
 @register
 def mesh(x, y, S):
@@ -205,6 +250,12 @@ def half_stripe(x, y, S):
 def stripe(x, y, S):
     sw = S//8
     return (x % (2*sw)) < sw
+
+@register
+def pinstripe(x, y, S):
+    sw = S//30
+    return (x % (3*sw)) < sw
+
 
 @register
 def triangle(x, y, S):
@@ -425,7 +476,7 @@ def desc(p: Param):
 
     inum = len(lines)
     ilist = []
-    maxrow = 8
+    maxrow = 12
     cols = (inum+maxrow-1)//maxrow
     if cols > 4:
         cols = 4
@@ -445,29 +496,36 @@ def desc(p: Param):
         #print(clayout)
         
     lo = [[sg.Text('Bauhaus風テキスタイル：タイルリスト')],
-          [sg.Text('Flag: r/n=反転パターンのenable/disable　　　',
-                   expand_x=True, text_align='right')],
-          [sg.Text('1,2=回転パターンの制限(省略時4方向)',
-                   expand_x=True, text_align='right')],
+          [sg.Text(size=(4,1)),
+           sg.Text('Flag:  r/n=反転パターンのenable/disable'),
+           sg.Text(' 1,2=回転パターンの制限(省略時4方向)'),
+           sg.Text(' a=重ね書きあり ',expand_x=True)],
           ilist,
           [sg.Button('Reset', key='-reset-', background_color='#ffffdd'),
-           sg.Text(expand_x=True),
+           sg.Button('Clear', key='-clr-'),
+           sg.Text(size=(3,1)),
+           sg.Checkbox('重ね書き', key='-ovw-',
+                       default=bauhaus_preserv['overwrite']),
+           sg.Text(size=(3,1)),
+           sg.Text(key='-msg-', text_color='#550000', expand_x=True),
            sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
            sg.Button(' Done ', key='-ok-', background_color='#ddffdd'),
            ]]
     #print(lo)
 
     touched = False
+    last_ovw = bauhaus_preserv['overwrite']
     wn = sg.Window('mod Bauhaus', layout=lo, modal=True)
     while True:
         ev, va = wn.read()
+        wn['-msg-'].update('')
         #print(va)
 
         if ev == '-can-' or ev == sg.WINDOW_CLOSED:
             break
-        if ev == '-ok-':
+        elif ev == '-ok-':
             if len(va['switch']) == 0:
-                print('No patterns')
+                wn['-msg-'].update('No patterns')
                 continue
             
             ll = len(bauhaus_preserv['funcs'])
@@ -490,7 +548,7 @@ def desc(p: Param):
                         itm[2] = 0.0
                         touched = True
             break
-        if ev == '-reset-':
+        elif ev == '-reset-':
             bauhaus_preserv['funcs'] = copy.deepcopy(DEFAULT_WEIGHTS)
             ll = len(bauhaus_preserv['funcs'])
             for i in range(ll):
@@ -503,9 +561,24 @@ def desc(p: Param):
                 wn['pr_'+name].update(str(itm[2]) if itm[2] > 0 else '0.0')
             touched = True
             continue
+        elif ev == '-clr-':
+            ll = len(bauhaus_preserv['funcs'])
+            for i in range(ll):
+                itm = bauhaus_preserv['funcs'][i]
+                name = itm[0]
+                if not 'en_'+name in va:
+                    continue
+                wn['en_'+name].update(False)
+            touched = True
+            continue
+
+        elif ev == '-ovw-':
+            if va['event_type'] == 'change':
+                bauhaus_preserv['overwrite'] = va['event']
+            continue
 
     wn.close()
-    if touched:
+    if touched or last_ovw != bauhaus_preserv['overwrite']:
         bank, weights, names = build_tile_bank_aa(s)
 
         return generate(p)
@@ -554,7 +627,6 @@ def generate_pattern(w, h, s, c1, c2, delta):
                 pname = names[idx]
                 prgb = (r,g,b)
             
-
             y0 = gy * s
             x0 = gx * s
 
@@ -567,8 +639,60 @@ def generate_pattern(w, h, s, c1, c2, delta):
             sub[..., 2] = b
             sub[..., 3] = a
 
+            if not bauhaus_preserv['overwrite']:
+                continue
+            if names[idx] in OVERWRITES  and np.random.rand() < 0.5:
+                overlay_random_pattern(sub, bank, weights, names, c1, c2,
+                                       delta, base, idx=idx)
+                continue
+            itm = next((item for item in bauhaus_preserv['funcs'] \
+                        if item[0] == names[idx]),None)
+            if itm is not None:
+                if 'a' in itm[1]:
+                    overlay_random_pattern(sub, bank, weights, names,
+                                           c1, c2, delta, base)
+                continue
+
     return img
 
+# =========================
+# セルへの重ね書き
+# =========================
+def overlay_random_pattern(sub, bank, weights, names, c1, c2, delta,
+                           c3, idx=None):
+    """同じセル(sub)にランダムなパターンを1回重ね書きする"""
+
+    # 別のパターンを選ぶ
+    if not idx is None:
+        name = names[idx]
+        base = [i for i, v in enumerate(names) if v == name]
+        no = base.index(idx)
+        target = [i for i, v in enumerate(names) if v == OVERWRITES[name]]
+        if target is None or len(target) < 1:
+            idx2 = None
+        else:
+            idx2 = target[min(no, len(target)-1)]
+    if idx is None or idx2 is None:        
+        idx2 = np.random.choice(len(bank), p=weights)
+    alpha2 = bank[idx2]
+
+    # ランダム色
+    base2 = c2 if c3 == c1 else c1
+    # base2 = c1 if np.random.rand() < 0.5 else c2
+    r2, g2, b2 = pick_color(base2, delta)
+
+    # アルファ
+    a2 = (alpha2 * 255).astype(np.uint8)
+
+    mask = (sub[..., 3] < 127)   # 背景が透明な部分だけ True
+
+    sub[mask, 0] = r2
+    sub[mask, 1] = g2
+    sub[mask, 2] = b2
+    sub[mask, 3] = a2[mask]
+
+
+    return
 
 # =========================
 # crop

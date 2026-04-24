@@ -56,12 +56,13 @@ APPENDS = [
     ('cross', None),
     ('arc', None),
     ('heart', None),
+    ('frog', None),
     ('penguin', None),
     ('dashpanel', None),
     ('burger', None),
     ('flower', None),
     ('egg_shade', 'egg'),
-    ('footprint', 'footprint'),
+    ('footprint', None),
     ]
 
 FN = {}
@@ -497,6 +498,43 @@ def takoyaki(size: int, color: tuple):
     return im
 
 @register
+def frog(size: int, color: tuple):
+    mask = Image.new('L',(size,size),0)
+    dr = ImageDraw.Draw(mask)
+
+    #face
+    dr.ellipse((0,size//4,size-1,size-1),255)
+
+    w = max(4, size // 20)
+    eye = [0,w,(size+w)//2,(size+w)//2+w]
+    eyeball = [size//2-int(w*4.8),(size+w)//4,
+               (size+w)//2-int(w*1.8),(size+w)//4+int(w*3.5)]
+    cheek = [2*w-w//3, size*3//4-w, 5*w-w//3, size*3//4+w*2]
+    corner = [w*5, size*3//4+w, w*6-1, size*3//4+w*2-1]
+
+    dr.ellipse(eye, fill=0)
+    dr.ellipse(eye, outline=255,width=w)
+    dr.ellipse((size-eye[2],eye[1],size-eye[0],eye[3]), fill=0)
+    dr.ellipse((size-eye[2],eye[1],size-eye[0],eye[3]), outline=255,width=w)
+    dr.ellipse(eyeball, fill=255)
+    dr.ellipse((size-eyeball[2],eyeball[1],size-eyeball[0],eyeball[3]),
+               fill=255)
+    dr.ellipse(cheek, fill=0)
+    dr.ellipse((size-cheek[2],cheek[1],size-cheek[0],cheek[3]), fill=0)
+    dr.ellipse(corner, fill=0)
+    dr.ellipse((size-corner[2],corner[1],size-corner[0],corner[3]), fill=0)
+
+    # mouth
+    dr.line((w*5+w//2,size*3//4+int(w*1.5),size//2-1,size-w,
+             size-w*5-w//2,size*3//4+int(w*1.5)),width=w,fill=0)
+
+    sheet = Image.new('RGBA',(size,size),color)
+    im = Image.new('RGBA',(size,size),(0,0,0,9))
+    im.paste(sheet, (0,0), mask)
+    
+    return im
+
+@register
 def penguin(size: int, color: tuple):
     sizey, size = size, int(size * 0.9)
     cx = int(size/2)
@@ -506,21 +544,21 @@ def penguin(size: int, color: tuple):
     mr = int(size/40)
     pt = [int(sizey/5), int(sizey*2/5), int(sizey/2),
           int(sizey*3/4), int(sizey*17/20)]
-    im = Image.new('RGBA',(size,sizey),0)
-    dr = ImageDraw.Draw(im)
+    mask = Image.new('L',(size,sizey),0)
+    dr = ImageDraw.Draw(mask)
     for x in (ex, size-ex):
-        dr.circle((x,pt[0]),ewr,fill='white')
-        dr.circle((x,pt[0]),ebr,fill='black')
-    dr.polygon([(mr,pt[2]),(cx,pt[1]),(size-mr,pt[2]),(cx,pt[3])],
-               fill='#000000')
+        dr.circle((x,pt[0]),ewr,fill=255)
+        dr.circle((x,pt[0]),ebr,fill=0)
     dr.polygon([(mr,pt[2]),(cx,pt[0]),(size-mr,pt[2]),(cx,pt[1])],
-               fill='#f4f354')
+               fill=255)
     dr.polygon([(mr,pt[2]),(cx,pt[3]),(size-mr,pt[2]),(cx,pt[4])],
-               fill='#f4f354')
-    
-    dr.circle((mr,pt[2]),mr,'#f4f354')
-    dr.circle((size-mr,pt[2]),mr,'#f4f354')
-    
+               fill=255)
+    dr.circle((mr,pt[2]),mr,255)
+    dr.circle((size-mr,pt[2]),mr,255)
+
+    sheet = Image.new('RGBA',(size,sizey),color)
+    im = Image.new('RGBA',(size,sizey),(0,0,0,9))
+    im.paste(sheet, (0,0), mask)
     return im
 
 @register
@@ -563,10 +601,7 @@ def dashpanel(size: int, color: tuple):
 
     panel_mask = roundedsquare_mask((int(r/2),int(r/2)),size,int(r/2))
     image.paste(panel, (0,0), panel_mask)
-
     return image
-
-
 
 def roundedsquare_mask(pos:tuple, size:int, r:int):
     sx,sy = pos
@@ -578,7 +613,6 @@ def roundedsquare_mask(pos:tuple, size:int, r:int):
     md.circle((size-sx-r,sy+r),r,fill=255)
     md.circle((sx+r,size-sy-r),r,fill=255)
     md.circle((size-sx-r,size-sy-r),r,fill=255)
-    
     return mask
 
 @register
@@ -719,8 +753,6 @@ def egg_shade(size, color):
 
 @register
 def footprint(size, color, degree=0, left=False):
-    # ====================
-    # 基本設定
     W, H = size, size
     x = np.linspace(-1, 1, W)
     y = np.linspace(-1, 1, H)
