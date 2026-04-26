@@ -60,7 +60,6 @@ usage: wallpaper.pyw [-h] [- plugin_dir PLUGI _DIR] [--list_mod les] [--module
 
  　　壁紙パターンをmod_*.py で追加できます
 
-- bauhaus: バウハウス風
 - bias: 斜め帯
 - chevron: ギザギザボーダー
 - dune: 砂丘？
@@ -71,9 +70,11 @@ usage: wallpaper.pyw [-h] [- plugin_dir PLUGI _DIR] [--list_mod les] [--module
 - gangi: 階段
 - garland: 垂れ幕  もしくは連提灯通り  間隔を両方マイナスにするとポルカドット
 - gladation: 染め分け/角度指定グラデーション 色数3だと中間色設定あり 色数1はベタ塗り
+- grass: 芝生シミュレータ
 - hexmap: グラデ六角タイル  color1=whiteの場合6色タイルに
 - hexmaze: 森の六角迷路
 - hilbert: ヒルベルト曲線
+- kaleidoscope: 万華鏡 くるくる回すだけでも楽しいかもしれない
 - memphis: メンフィス風
 - packingbubble: グラデーション泡
 - peano: ペアノ曲線

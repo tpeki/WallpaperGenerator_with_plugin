@@ -10,7 +10,7 @@ import copy
 WIDTH = 1920
 HEIGHT = 1080
 
-TILE = 110
+TILE = 120
 COLOR1 = (140, 100, 50)
 COLOR2 = (30, 80, 120)
 JITTER = 48  # c1,c2共通でrgbに加算(ただしclipされる)
@@ -34,6 +34,7 @@ DEFAULT_WEIGHTS = [
     ['half_triangl','n',  1.0],
     ['dbl_triangle','r',  0.2],
     ['square',      'n',  0.0],
+    ['boko',        'n',  0.4],
     ['half_box',    'n',  0.2],
     ['half_half',   'n',  0.2],
     ['bar',         'na', 0.03],
@@ -223,6 +224,11 @@ def dbl_ring(x, y, S):
 @register
 def square(x, y, S):
     return (x%2 < 1)
+
+@register
+def boko(x, y, S):
+    h = S // 2
+    return (np.abs(x - h) >= (y-h))
 
 @register
 def half_box(x, y, S):
@@ -601,8 +607,8 @@ def pick_color(c, delta):
 # パターン生成（RGBA）
 # =========================
 def generate_pattern(w, h, s, c1, c2, delta):
-    grid_w = (w + s - 1) // s + 1
-    grid_h = (h + s - 1) // s + 1
+    grid_w = (w + s*2 - 1) // s + 1
+    grid_h = (h + s*2 - 1) // s + 1
 
     W = grid_w * s
     H = grid_h * s
@@ -716,8 +722,12 @@ def generate(p: Param):
 
     # パターン生成（RGBA）
     pattern_big = generate_pattern(w, h, s, c1, c2, delta)
+    fg1 = Image.fromarray(pattern_big, 'RGBA')
+    print(f'big: {fg1.size}')
+    
     pattern = center_crop(pattern_big, w, h)
     fg = Image.fromarray(pattern, 'RGBA')
+    print(f'norm: {fg.size}')
 
     # 背景（RGB）
     if p.h_img is not None:
