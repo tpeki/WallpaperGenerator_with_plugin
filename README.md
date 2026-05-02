@@ -79,6 +79,7 @@ usage: wallpaper.pyw [-h] [- plugin_dir PLUGI _DIR] [--list_mod les] [--module
 - packingbubble: グラデーション泡
 - peano: ペアノ曲線
 - penrose: ペンローズタイル
+- polkadot 水玉模様的な
 - scallop: ホタテ貝
 - sprites: スプライトまみれ  (プレビュークリックでスプライトセットエディタ起動)
 - stripe: 縦ストライプ・モダン
