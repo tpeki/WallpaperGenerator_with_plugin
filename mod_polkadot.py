@@ -8,6 +8,7 @@ COLOR1 = '#94867B'
 COLOR2 = '#E7CBAD'
 RADIUS = 20
 DISTANCE = 120
+QUALITY = 2
 
 TRIANGULAR = 0
 SQUARE = 1
@@ -51,7 +52,9 @@ def intro(modlist: Modules, module_name):
                        {'color1':'背景色',
                         'color2':'前景色',
                         'pwidth':'ドット径',
-                        'pheight':'格子間隔'})
+                        'pheight':'格子間隔',
+                        'pdepth':'品質(1..4)',
+                        })
     return module_name
 
 # おすすめパラメータ
@@ -60,6 +63,7 @@ def default_param(p: Param):
     p.color2 = RGBColor(COLOR2)
     p.pwidth = RADIUS
     p.pheight = DISTANCE
+    p.pdepth = QUALITY
     return p
 
 # =========================
@@ -170,6 +174,8 @@ def add_gradation(x, y, R, color, shade, angle, shift):
 
     return patch
 
+def clip(v, minimum, maximum):
+    return int(min(max(v,minimum),maximum))
 
 # =========================
 # 円パッチ生成（AA + グラデーション + 中心ずらし）
@@ -177,7 +183,8 @@ def add_gradation(x, y, R, color, shade, angle, shift):
 @regi
 def circle_dot(p: Param, *, shade=0, angle=215, shift=40):
     c2 = p.color2.ctoi()
-    r = p.pwidth
+    gs = p.pdepth  # global scale
+    r = p.pwidth * gs
     shade = np.clip(check_preservarg('shade', shade),0,255)
     angle = check_preservarg('angle', angle)
     shift = check_preservarg('shift', shift) / 100.0
@@ -204,11 +211,13 @@ def circle_dot(p: Param, *, shade=0, angle=215, shift=40):
 
     patch = patch.reshape(h, scale, w, scale, 3).mean(axis=(1, 3))
     mask  = mask.reshape(h, scale, w, scale).mean(axis=(1, 3))
+    
+    eps = 1e-6
+    mask_safe = np.maximum(mask, eps)
+    patch = patch / mask_safe[..., None]
+    patch[mask <= eps] = 0
 
     return patch, mask
-
-def clip(v, minimum, maximum):
-    return int(min(max(v,minimum),maximum))
 
 # =========================
 # 六角ドット
@@ -216,7 +225,8 @@ def clip(v, minimum, maximum):
 @regi
 def hex_dot(p: Param, *, inner_r=40, shade=0, angle=215, shift=40):
     c2 = p.color2.ctoi()
-    r = p.pwidth
+    gs = p.pdepth  # global scale
+    r = p.pwidth * gs
 
     inner_r = clip(check_preservarg('inner_r', inner_r), 0, 99) / 100.0
     shade = clip(check_preservarg('shade', shade),0,255)
@@ -261,7 +271,9 @@ def hex_dot(p: Param, *, inner_r=40, shade=0, angle=215, shift=40):
 @regi
 def spike_dot(p: Param, *, spikes=6, inner_r=40, shade=0, angle=215, shift=40):
     c2 = p.color2.ctoi()
-    r = p.pwidth
+    gs = p.pdepth  # global scale
+    r = p.pwidth * gs
+
     shade = clip(check_preservarg('shade', shade),0,255)
     angle = check_preservarg('angle', angle)
     shift = check_preservarg('shift', shift) / 100.0
@@ -306,7 +318,9 @@ def spike_dot(p: Param, *, spikes=6, inner_r=40, shade=0, angle=215, shift=40):
 @regi
 def pentastar_dot(p: Param, *, spikes=5, shade=0, angle=215, shift=40):
     c2 = p.color2.ctoi()
-    r = p.pwidth
+    gs = p.pdepth  # global scale
+    r = p.pwidth * gs
+
     spikes = clip(check_preservarg('spikes', spikes),5,255)
     shade = clip(check_preservarg('shade', shade),0,255)
     angle = check_preservarg('angle', angle)
@@ -369,7 +383,9 @@ def pentastar_dot(p: Param, *, spikes=5, shade=0, angle=215, shift=40):
 def snowflake_dot(p: Param, *, shade=0, angle=215, shift=40,
                   bthick=50, blength=50, btaper=70):
     c2 = p.color2.ctoi()
-    r = p.pwidth
+    gs = p.pdepth  # global scale
+    r = p.pwidth * gs
+
     shade = clip(check_preservarg('shade', shade),0,255)
     angle = check_preservarg('angle', angle)
     shift = check_preservarg('shift', shift) / 100.0
@@ -448,18 +464,18 @@ def snowflake_dot(p: Param, *, shade=0, angle=215, shift=40,
 # 三角格子配置
 # =========================
 def polkadot(param: Param):
-    r = param.pwidth
-    v = param.pheight
-    c1 = param.color1.ctoi()
-    c2 = param.color2.ctoi()
-    w, h = param.width, param.height
-    lattice = polkadot_preserv['lattice']
+    scale = clip(int(param.pdepth), 1, 4)
+    r = param.pwidth * scale  # パッチ基本サイズ
+    v = param.pheight * scale  # 格子点間の距離
+    #c2 = param.color2.ctoi()  # 前景色(パッチ基本色)
+    w, h = param.width * scale, param.height * scale  # 画像サイズ
+    lattice = polkadot_preserv['lattice']  # 格子タイプ(TRIANGULAR|SQUARE)
 
     W = w + 4*r
     H = h + 4*r
     
     img = np.zeros((H, W, 3), dtype=np.float32)
-    img[:] = c1
+    alpha = np.zeros((H, W), dtype=np.float32)
 
     shape = polkadot_preserv['shape']
     if shape in polkadot_preserv['funcs']:
@@ -510,90 +526,21 @@ def polkadot(param: Param):
             sub_patch = patch[py0:py1, px0:px1]
             sub_mask  = mask[py0:py1, px0:px1]
             sub_img   = img[iy0:iy1, ix0:ix1]
-
+            sub_alpha = alpha[iy0:iy1, ix0:ix1]
+            
             mask3 = sub_mask[..., None]
             sub_img[:] = sub_img * (1 - mask3) + sub_patch * mask3
+            sub_alpha[:] = np.maximum(sub_alpha, sub_mask)
 
     img = np.clip(img, 0, 255).astype(np.uint8)
-    return Image.fromarray(img[r*2:r*2+h, r*2:r*2+w], mode='RGB')
+    alpha = np.clip(alpha * 255, 0, 255).astype(np.uint8)
+    rgba = np.dstack([img, alpha])
+
+    return Image.fromarray(rgba[r*2:r*2+h, r*2:r*2+w], mode='RGBA')
 
 
 # =========================
-# 高速版(形状追加がしにくいので参考まで)
-# =========================
-def polkadot_fast(param: Param, shade=0, angle=215, shift=40):
-    r = param.pwidth
-    v = param.pheight
-    c1 = param.color1.ctoi()
-    c2 = param.color2.ctoi()
-    lattice = param.color_jitter
-    w, h = param.width, param.height
-    W = w + 4*r
-    H = h + 4*r
-    
-    img = np.zeros((H, W, 3), dtype=np.float32)
-    img[:] = c1
-
-    y, x = np.indices((H, W))
-    dy = v * np.sqrt(3) / 2 if lattice == TRIANGULAR else v
-
-    # --- グリッド座標 ---
-    if lattice == TRIANGULAR:
-        j0 = np.floor(y / dy).astype(int)
-        js = np.stack([j0 - 1, j0, j0 + 1], axis=0)  # (3, H, W)
-        even = (js % 2 == 0)
-        
-        gx = np.where(
-            even,
-            np.round(x / v),
-            np.round((x - v/2) / v)
-        )
-        cx = np.where(
-            even,
-            gx * v,
-            gx * v + v/2
-        )
-        cy = js * dy
-
-        dist = np.sqrt((x - cx)**2 + (y - cy)**2)
-        idx = np.argmin(dist, axis=0)
-
-        cx = np.take_along_axis(cx, idx[None, ...], axis=0)[0]
-        cy = np.take_along_axis(cy, idx[None, ...], axis=0)[0]
-        dist = np.take_along_axis(dist, idx[None, ...], axis=0)[0]
-        mask = dist <= r
-    else:
-        gx = np.round(x / v)
-        gy = np.round(y / v)
-        cx = gx * v
-        cy = gy * v
-        dist = (x - cx)**2 + (y - cy)**2
-        mask = dist <= r**2
-
-    # --- グラデーション（方向付き） ---
-    angle = np.deg2rad(angle)
-    dx = np.sin(angle) * (shift / 100.0) * r
-    dy_shift = np.cos(angle) * (shift / 100.0) * r
-
-    dist_grad = np.sqrt((x - (cx + dx))**2 + (y - (cy + dy_shift))**2)
-
-    if shade > 0:
-        grad = 1 - (dist_grad / r)
-        grad = np.clip(grad, 0, 1)
-
-        for k in range(3):
-            color = (c2[k] - shade) + shade * grad
-            img[..., k] = np.where(mask, color, img[..., k])
-    else:
-        for k in range(3):
-            img[..., k] = np.where(mask, c2[k], img[..., k])
-
-    img = np.clip(img, 0, 255).astype(np.uint8)
-    return Image.fromarray(img[r*2:r*2+h,r*2:r*2+w], mode='RGB')
-
-
-# =========================
-# 基本画像生成  hold未対応
+# 基本画像生成
 # =========================
 def generate(p):
     if polkadot_preserv['funcs'] is None:
@@ -608,7 +555,18 @@ def generate(p):
         if a in STANDARD_ARGS:
             polkadot_preserv['args'][a] = STANDARD_ARGS[a]
 
-    return polkadot(p)
+    scale = clip(int(p.pdepth), 1, 4)
+    W = p.width * scale
+    H = p.height * scale
+    dot_img = polkadot(p)
+    
+    if p.h_img is not None:
+        bg = p.bg(W, H).convert('RGBA')
+    else:
+        bg = Image.new('RGBA',(W, H),(*p.color1.ctoi(), 255))
+
+    out = Image.alpha_composite(bg, dot_img)
+    return out.resize((p.width, p.height), Image.LANCZOS)
 
 
 # =========================
