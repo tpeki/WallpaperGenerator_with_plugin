@@ -17,7 +17,7 @@ polkadot_preserv = {'shape': None,
                     'lattice': TRIANGULAR,
                     'funcs': None,
                     'arglists': None,
-                    'args': {}
+                    'prevsets': {}
                     }
 STANDARD_ARGS = {} # 'shade':0, 'angle':215, 'shift':40}
 
@@ -72,16 +72,18 @@ def default_param(p: Param):
 def confline(shape, current):
     args = AG[shape]
     defaults = DF[shape]
+    if shape in polkadot_preserv['prevsets']:
+        prevsets = polkadot_preserv['prevsets'][shape]
+    else:
+        prevsets = DF[shape]
     
     line = [sg.Radio('', group_id='radio', key=shape,
                      default=True if shape == current else False),
             sg.Text(shape, size=(12,1))]
     for a in args:
         line.append(sg.Text(f' {a}'))
-        if a in polkadot_preserv['args']:
-            value = polkadot_preserv['args'][a]
-        elif a in STANDARD_ARGS:
-            value = STANDARD_ARGS[a]
+        if a in prevsets:
+            value = prevsets[a]
         elif a in defaults:
             value = defaults[a]
         else:
@@ -129,8 +131,8 @@ def desc(p: Param):
     wn.close()
 
     if change:
-        polkadot_preserv['args'] = args
         polkadot_preserv['shape'] = shape
+        polkadot_preserv['prevsets'][shape] = args
         new_img = generate(p)
         return new_img
     else:
@@ -141,10 +143,15 @@ def desc(p: Param):
 # 保存パラメータがあれば返す
 # =========================
 def check_preservarg(name, value):
-    if name in polkadot_preserv['args']:
-        return polkadot_preserv['args'][name]
-    else:
-        return value
+    shape = polkadot_preserv['shape']
+    if shape in polkadot_preserv['prevsets']:
+        if name in polkadot_preserv['prevsets'][shape]:
+            return polkadot_preserv['prevsets'][shape][name]
+    return value
+
+def set_default(shape, arg, value):
+    global DF
+    DF[shape][arg] = value
 
 # =========================
 # グラデーション
@@ -444,6 +451,79 @@ def snowflake_dot(p: Param, *, shade=0, angle=215, shift=40,
     # --- 軽くぼかし（AA代わり） ---
     mask = np.clip(mask * 1.5, 0, 1)
 
+    patch = add_gradation(x, y, R, c2, shade, angle, shift)
+    patch *= mask[..., None]
+
+    # --- SSAA ---
+    h = size // scale
+    w = size // scale
+
+    patch = patch[:h*scale, :w*scale]
+    mask  = mask[:h*scale, :w*scale]
+
+    patch = patch.reshape(h, scale, w, scale, 3).mean(axis=(1, 3))
+    mask  = mask.reshape(h, scale, w, scale).mean(axis=(1, 3))
+
+    return patch, mask
+
+@regi
+def clover_dot(p: Param, *, rotate=20, shade=0, angle=215, shift=40):
+    c2 = p.color2.ctoi()
+    gs = p.pdepth
+    r = p.pwidth * gs
+
+    rotate = check_preservarg('rotate', rotate)
+    shade = clip(check_preservarg('shade', shade), 0, 255)
+    angle = check_preservarg('angle', angle)
+    shift = check_preservarg('shift', shift) / 100.0
+
+    scale = 4
+    R = r * scale
+    size = 2 * R + 1
+
+    coords = np.arange(-R, R+1)
+    y, x = np.meshgrid(coords, coords, indexing='ij')
+
+    # --- 正規化 ---
+    xn = x / R
+    yn = y / R
+
+    rot = np.deg2rad(rotate)
+    c = np.cos(rot)
+    s = np.sin(rot)
+
+    xr = xn * c + yn * s
+    yr = -xn * s + yn * c
+    xn, yn = xr, yr
+
+    # --- 極座標 ---
+    theta = np.arctan2(yn, xn)
+    radius = np.sqrt(xn**2 + yn**2)
+
+    # --- 回転関数 ---
+    def rotate(px, py, ang):
+        c = np.cos(ang)
+        s = np.sin(ang)
+        return px*c - py*s, px*s + py*c
+
+    d = 0.8  # 葉の位置（重要）
+
+    mask = np.zeros_like(xn, dtype=bool)
+
+    for ang in [0, np.pi/2, np.pi, 3*np.pi/2]:
+        xr, yr = rotate(xn, yn, ang)
+        theta = np.arctan2(yr - d, xr)
+        radius = np.sqrt(xr**2 + (yr - d)**2)
+        heart_r = 0.32 * (1 - np.sin(theta))
+        m = radius <= heart_r
+        mask |= m
+
+    center = (xn**2 + yn**2 < 0.4**2)
+    mask = mask | center
+    #mask = np.logical_xor(mask, center)
+    mask = mask.astype(np.float32)
+    
+    # --- 色 ---
     patch = add_gradation(x, y, R, c2, shade, angle, shift)
     patch *= mask[..., None]
 

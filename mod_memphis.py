@@ -910,53 +910,45 @@ def desc(p: Param):
         al_w = len(item)+2 if al_w < len(item) else al_w
     list_w = max(sl_w, al_w)
 
-    sha_lo = [[sg.Column(
-        layout=[[sg.Checkbox('Standard shapes', default=cur_shapes,
-                             key='-sha-', group_id='shape')],
-                [sg.Text('', expand_y=True, size=(16,1))]]),
+    sha_lo = [[sg.Column(layout=
+                         [[sg.Checkbox('Standard shapes', default=cur_shapes,
+                                       key='-sha-', group_id='shape')],
+                          [sg.Text('', expand_y=True)]
+                          ]),
                sg.Multiline(shape_list, text_align='right', expand_x=True,
-                        size=(list_w,sl_h))],
+                            size=(list_w,sl_h)),
+               ],
               ]
 
-    al_h = max(len(APPENDS),3)
-    if al_w*2 < list_w or apd_num >= 5:
-        fold = True
-        al_w = max(al_w, list_w // 2)
-        al_h = max(int(len(APPENDS)/2+0.5),3)
-    else:
-        fold = False
-        
-    appends_items = []
-    for i in range(apd_num):
-        item = f'({APPENDS[i][0]}, {APPENDS[i][1]})'
-        appends_items.append(sg.Checkbox(item, cur_apds[i], group_id='shape',
-                                         key=f'-apd{i:02d}-'))
+    maxrow = 6
+    cols = (apd_num+maxrow-1)//maxrow
+    if cols > 3:
+        cols = 3
+    rows = (apd_num+cols-1)//cols
 
-    apd_lo = [[sg.Text('Append shapes', expand_x=True)]]
-    if fold:
-        left = []
-        right = []
-        lines = int(apd_num/2+0.5)
-        for i in range(lines):        
-            left.append([appends_items[i]])
-            if i+lines >= apd_num:
-                right.append([sg.Text('',expand_x=True)])
-                # print(APPENDS[i])
+    columns = []
+    for v in range(cols):
+        clayout = []
+        for w in range(rows):
+            i = v*rows+w
+            if i >= apd_num:
                 break
-            right.append([appends_items[i+lines]])
-            # print(APPENDS[i],APPENDS[i+lines])
-
-        apd_lo.append([sg.Column(layout=left),
-                       sg.Column(layout=right)])
-    else:        
-        for x in appends_items:
-            apd_lo.append([x])
+            item = f'({APPENDS[i][0]}, {APPENDS[i][1]})'
+            clayout.append([sg.Checkbox(item, cur_apds[i], group_id='shape',
+                                         key=f'-apd{i:02d}-')])
+        columns.append(sg.Column(layout=clayout, vertical_alignment='top',
+                              expand_y=True))
     
-    lo = [[sg.Frame('', layout=sha_lo, relief='groove')],
-          [sg.Frame('', layout=apd_lo, relief='groove')],
-          [sg.Text('', key='-msg-', expand_x=True),
-           sg.Button('Cancel', key='-can-'),
-           sg.Button('Ok', key='-ok-')],
+    apd_lo = [[sg.Text('Append shapes', expand_x=True)],
+              columns]
+
+    
+    lo = [[sg.Frame('', layout=sha_lo, relief='groove', expand_x=True)],
+          [sg.Frame('', layout=apd_lo, relief='groove', expand_x=True)],
+          [sg.Button('Clear', key='-clr-', background_color='#ffffdd'),
+           sg.Text('', key='-msg-', expand_x=True),
+           sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
+           sg.Button('Ok', key='-ok-', background_color='#ddffdd')],
           ]
 
     wn = sg.Window('Choose pattern-groups', layout=lo, modal=True)
@@ -971,6 +963,11 @@ def desc(p: Param):
             if result != []:
                 break
             wn['-msg-'].update('Choice at least one!', text_color='#ff0000')
+        elif ev == '-clr-':
+            for i in range(apd_num):
+                wn[f'-apd{i:02d}-'].set_value(False)
+            wn['-sha-'].set_value(True)
+            wn.refresh()
         else:
             wn['-msg-'].update('')
 
