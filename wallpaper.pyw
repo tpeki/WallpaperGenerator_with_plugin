@@ -551,6 +551,10 @@ def gui_main(modlist: Modules, mods, param: Param,
                     preview = render_preview(image, scale, cropos)
                     update_image(wn, '-img-', preview)
                     set_param(wn, param, modlist.mod_gui[modname])
+                while True:
+                    ev, va = wn.read(timeout=0)
+                    if ev == "-TIMEOUT-":
+                        break
         elif isinstance(ev, str):
             widg = ev[1:-2]
             # print( widg )

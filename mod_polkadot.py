@@ -12,6 +12,15 @@ QUALITY = 2
 
 TRIANGULAR = 0
 SQUARE = 1
+DIAGONAL = 2
+ISOMETRIC = 3
+LATTICES=['TRIANGULAR','SQUARE','DIAGONAL','ISOMETRIC',
+          ]
+LATRATIO = [(1, np.sqrt(3)/2, 0.5),  # Triangular h-space, v-space, phase-shift
+            (1, 1, 0),
+            (np.sqrt(2), np.sqrt(2)/2, 0.5),
+            (np.sqrt(3), 0.5, 0.5),
+            ]
 
 polkadot_preserv = {'shape': None,
                     'lattice': TRIANGULAR,
@@ -93,11 +102,10 @@ def confline(shape, current):
     return line
 
 def desc(p: Param):
-    lat = 'TRIANGULAR' if polkadot_preserv['lattice'] == TRIANGULAR \
-          else 'SQUARE'
+    lat = clip(polkadot_preserv['lattice'], 0, len(LATTICES)-1)
     layout = [[sg.Text('[POLKADOT configure]   Lattice Type:'),
-               sg.Combo(['TRIANGULAR','SQUARE'],
-                        default_value=lat,
+               sg.Combo(LATTICES,
+                        default_value=LATTICES[lat],
                         key='-lattice-'),
                ]]
     curshape = polkadot_preserv['shape']
@@ -118,10 +126,8 @@ def desc(p: Param):
             break
         elif ev == '-ok-':
             change = True
-            if va['-lattice-'] == 'TRIANGULAR':
-                polkadot_preserv['lattice'] = TRIANGULAR
-            else:
-                polkadot_preserv['lattice'] = SQUARE
+            lname = va['-lattice-']
+            polkadot_preserv['lattice'] = LATTICES.index(lname)
             shape = va['radio']
             args = {}
             for a in AG[shape]:
@@ -564,7 +570,11 @@ def polkadot(param: Param):
         patch, mask = circle_dot(param)
     ps_y, ps_x = patch.shape[:2]
 
-    dy = v * np.sqrt(3) / 2 if lattice == TRIANGULAR else v
+    lattice = clip(lattice, 0, len(LATTICES)-1)
+    dy = v * LATRATIO[lattice][1]
+    v = v * LATRATIO[lattice][0]  # 順番大事
+    sf = v * LATRATIO[lattice][2]
+    
     n_rows = int(H / dy) + 2
     n_cols = int(W / v) + 2
 
@@ -572,10 +582,7 @@ def polkadot(param: Param):
 
     for j in range(n_rows):
         cy = int(j * dy)
-        if lattice == TRIANGULAR:
-            offset = int(v / 2) if (j % 2) else 0
-        else:
-            offset = 0
+        offset = sf if (j % 2) else 0
         cx_row = (cx_base + offset).astype(int)
 
         for i in range(n_cols):
