@@ -2,12 +2,12 @@ import numpy as np
 from PIL import Image
 from wall_common import *
 
-START_COLOR = (0x11, 0x11, 0x66)
-END_COLOR = (0x11, 0x60, 0x00)
-MID_COLOR = (0x66, 0x44, 0x33)
+START_COLOR = (100, 100, 230)
+END_COLOR = (36, 124, 136)
+MID_COLOR = (224, 120, 54)
 MODE = 3
-ANGLE = 45
-MIDDLE_POINT = 60
+ANGLE = 90
+MIDDLE_POINT = 70
 
 
 def intro(modlist: Modules, module_name):

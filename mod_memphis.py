@@ -695,8 +695,8 @@ def burger(size: int, color: tuple):
 def flower(size: int, petal_color: tuple):
     COLOR_PETAL = (255, 50, 50)  # 花弁色
     PETAL_JITTER = 40  # 花弁色のゆらぎ
-    COLOR_STAMEN = (0, 0, 0)   # 雄蕊色
-    COLOR_STEM = (50, 120, 30)  # 茎色
+    COLOR_STAMEN = (0, 0, 0, 0)   # 雄蕊色
+    COLOR_STEM = (50, 120, 30, 255)  # 茎色
     
     def ellip(draw, c, lr, sr, colr):
         draw.ellipse((c[0]-lr, c[1]-sr, c[0]+lr, c[1]+sr), fill=colr)

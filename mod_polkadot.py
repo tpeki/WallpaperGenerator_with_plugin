@@ -6,14 +6,11 @@ import TkEasyGUI as sg
 
 COLOR1 = '#94867B'
 COLOR2 = '#E7CBAD'
+COLOR3 = '#94867B'
 RADIUS = 20
 DISTANCE = 120
 QUALITY = 2
 
-TRIANGULAR = 0
-SQUARE = 1
-DIAGONAL = 2
-ISOMETRIC = 3
 LATTICES=['TRIANGULAR','SQUARE','DIAGONAL','ISOMETRIC',
           ]
 LATRATIO = [(1, np.sqrt(3)/2, 0.5),  # Triangular h-space, v-space, phase-shift
@@ -22,8 +19,11 @@ LATRATIO = [(1, np.sqrt(3)/2, 0.5),  # Triangular h-space, v-space, phase-shift
             (np.sqrt(3), 0.5, 0.5),
             ]
 
+GRADBIAS = ['NOGRAD', 'VERTICAL', 'HORIZONTAL', 'DIAGONAL', 'RADIAL']
+
 polkadot_preserv = {'shape': None,
-                    'lattice': TRIANGULAR,
+                    'lattice': 0,  # TRIANGULAR
+                    'gradation': 0,  # NOGRAD
                     'funcs': None,
                     'arglists': None,
                     'prevsets': {}
@@ -60,6 +60,7 @@ def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, '水玉など',
                        {'color1':'背景色',
                         'color2':'前景色',
+                        'color3':'前景グラデ',
                         'pwidth':'ドット径',
                         'pheight':'格子間隔',
                         'pdepth':'品質(1..4)',
@@ -70,6 +71,7 @@ def intro(modlist: Modules, module_name):
 def default_param(p: Param):
     p.color1 = RGBColor(COLOR1)
     p.color2 = RGBColor(COLOR2)
+    p.color3 = RGBColor(COLOR3)
     p.pwidth = RADIUS
     p.pheight = DISTANCE
     p.pdepth = QUALITY
@@ -103,10 +105,16 @@ def confline(shape, current):
 
 def desc(p: Param):
     lat = clip(polkadot_preserv['lattice'], 0, len(LATTICES)-1)
+    gra = clip(polkadot_preserv['gradation'], 0, len(GRADBIAS)-1)
+    
     layout = [[sg.Text('[POLKADOT configure]   Lattice Type:'),
                sg.Combo(LATTICES,
                         default_value=LATTICES[lat],
-                        key='-lattice-'),
+                        key='-lattice-', readonly=True),
+               sg.Text('Gradation:'),
+               sg.Combo(GRADBIAS,
+                        default_value=GRADBIAS[gra],
+                        key='-gradation-', readonly=True),               
                ]]
     curshape = polkadot_preserv['shape']
     for fn in polkadot_preserv['funcs']:
@@ -128,6 +136,8 @@ def desc(p: Param):
             change = True
             lname = va['-lattice-']
             polkadot_preserv['lattice'] = LATTICES.index(lname)
+            gname = va['-gradation-']
+            polkadot_preserv['gradation'] = GRADBIAS.index(gname)
             shape = va['radio']
             args = {}
             for a in AG[shape]:
@@ -160,13 +170,17 @@ def set_default(shape, arg, value):
     DF[shape][arg] = value
 
 # =========================
-# グラデーション
+# ドット毎グラデーション(明度)
 # =========================
-def add_gradation(x, y, R, color, shade, angle, shift):
+def luminance(x, y, R, shade, angle, shift):
     """ shade : 0..255
         angle : 度
         shift : ％
     """
+    if shade == 0:
+        lum = np.ones(np.broadcast(x, y).shape, dtype=np.float32)
+        return lum
+    
     # --- グラデーション ---
     angle = np.deg2rad(angle)
     dx = np.sin(angle) * shift * R
@@ -177,16 +191,17 @@ def add_gradation(x, y, R, color, shade, angle, shift):
     size = max(max(*x.shape),max(*y.shape))   
     patch = np.zeros((size, size, 3), dtype=np.float32)
     
-    if shade > 0:
-        grad = 1 - (dist_grad / R)
-        grad = np.clip(grad, 0, 1)
-        for k in range(3):
-            patch[..., k] = (color[k] - shade) + shade * grad
-    else:
-        patch[:] = color
+    grad = 1 - (dist_grad / R)
+    grad = np.clip(grad, 0, 1)
 
-    return patch
+    s = shade/255.0
+    lum = (1-s) + s*grad
+    return lum.astype(np.float32)
 
+
+# =========================
+# クリップ(型非依存)
+# =========================
 def clip(v, minimum, maximum):
     return int(min(max(v,minimum),maximum))
 
@@ -195,7 +210,6 @@ def clip(v, minimum, maximum):
 # =========================
 @regi
 def circle_dot(p: Param, *, shade=0, angle=215, shift=40):
-    c2 = p.color2.ctoi()
     gs = p.pdepth  # global scale
     r = p.pwidth * gs
     shade = np.clip(check_preservarg('shade', shade),0,255)
@@ -212,9 +226,10 @@ def circle_dot(p: Param, *, shade=0, angle=215, shift=40):
     dist_center = np.sqrt(x**2 + y**2)
     mask = (dist_center <= R).astype(np.float32)
 
-    patch = add_gradation(x, y, R, c2, shade, angle, shift)
+    lum = luminance(x, y, R, shade, angle, shift)
+    patch = np.repeat(lum[..., None], 3, axis=2)
     patch *= mask[..., None]
-
+    
     # ---- SSAA ダウンサンプリング ----
     h = size // scale
     w = size // scale
@@ -237,7 +252,6 @@ def circle_dot(p: Param, *, shade=0, angle=215, shift=40):
 # =========================
 @regi
 def hex_dot(p: Param, *, inner_r=40, shade=0, angle=215, shift=40):
-    c2 = p.color2.ctoi()
     gs = p.pdepth  # global scale
     r = p.pwidth * gs
 
@@ -263,9 +277,10 @@ def hex_dot(p: Param, *, inner_r=40, shade=0, angle=215, shift=40):
     cond4 = (x**2+y**2) <= inner**2
     mask = ((cond1 & cond2 & cond3) & (~cond4)).astype(np.float32)
 
-    patch = add_gradation(x, y, R, c2, shade, angle, shift)
+    lum = luminance(x, y, R, shade, angle, shift)
+    patch = np.repeat(lum[..., None], 3, axis=2)
     patch *= mask[..., None]
-
+    
     # --- SSAA ---
     h = size // scale
     w = size // scale
@@ -283,7 +298,6 @@ def hex_dot(p: Param, *, inner_r=40, shade=0, angle=215, shift=40):
 # =========================
 @regi
 def spike_dot(p: Param, *, spikes=6, inner_r=40, shade=0, angle=215, shift=40):
-    c2 = p.color2.ctoi()
     gs = p.pdepth  # global scale
     r = p.pwidth * gs
 
@@ -310,7 +324,8 @@ def spike_dot(p: Param, *, spikes=6, inner_r=40, shade=0, angle=215, shift=40):
     # --- マスク ---
     mask = (dist <= star_r).astype(np.float32)
 
-    patch = add_gradation(x, y, R, c2, shade, angle, shift)
+    lum = luminance(x, y, R, shade, angle, shift)
+    patch = np.repeat(lum[..., None], 3, axis=2)
     patch *= mask[..., None]
 
     # --- SSAA ---
@@ -330,7 +345,6 @@ def spike_dot(p: Param, *, spikes=6, inner_r=40, shade=0, angle=215, shift=40):
 # =========================
 @regi
 def pentastar_dot(p: Param, *, spikes=5, shade=0, angle=215, shift=40):
-    c2 = p.color2.ctoi()
     gs = p.pdepth  # global scale
     r = p.pwidth * gs
 
@@ -374,7 +388,8 @@ def pentastar_dot(p: Param, *, spikes=5, shade=0, angle=215, shift=40):
     mask = np.sum(cond, axis=-1) % 2
     mask = mask.astype(np.float32)
 
-    patch = add_gradation(x, y, R, c2, shade, angle, shift)
+    lum = luminance(x, y, R, shade, angle, shift)
+    patch = np.repeat(lum[..., None], 3, axis=2)
     patch *= mask[..., None]
 
     # --- SSAA ---
@@ -395,7 +410,6 @@ def pentastar_dot(p: Param, *, spikes=5, shade=0, angle=215, shift=40):
 @regi
 def snowflake_dot(p: Param, *, shade=0, angle=215, shift=40,
                   bthick=50, blength=50, btaper=70):
-    c2 = p.color2.ctoi()
     gs = p.pdepth  # global scale
     r = p.pwidth * gs
 
@@ -457,7 +471,8 @@ def snowflake_dot(p: Param, *, shade=0, angle=215, shift=40,
     # --- 軽くぼかし（AA代わり） ---
     mask = np.clip(mask * 1.5, 0, 1)
 
-    patch = add_gradation(x, y, R, c2, shade, angle, shift)
+    lum = luminance(x, y, R, shade, angle, shift)
+    patch = np.repeat(lum[..., None], 3, axis=2)
     patch *= mask[..., None]
 
     # --- SSAA ---
@@ -474,7 +489,6 @@ def snowflake_dot(p: Param, *, shade=0, angle=215, shift=40,
 
 @regi
 def clover_dot(p: Param, *, rotate=20, shade=0, angle=215, shift=40):
-    c2 = p.color2.ctoi()
     gs = p.pdepth
     r = p.pwidth * gs
 
@@ -529,8 +543,8 @@ def clover_dot(p: Param, *, rotate=20, shade=0, angle=215, shift=40):
     #mask = np.logical_xor(mask, center)
     mask = mask.astype(np.float32)
     
-    # --- 色 ---
-    patch = add_gradation(x, y, R, c2, shade, angle, shift)
+    lum = luminance(x, y, R, shade, angle, shift)
+    patch = np.repeat(lum[..., None], 3, axis=2)
     patch *= mask[..., None]
 
     # --- SSAA ---
@@ -547,18 +561,23 @@ def clover_dot(p: Param, *, rotate=20, shade=0, angle=215, shift=40):
 
 
 # =========================
-# 三角格子配置
+# 格子配置
 # =========================
 def polkadot(param: Param):
     scale = clip(int(param.pdepth), 1, 4)
     r = param.pwidth * scale  # パッチ基本サイズ
     v = param.pheight * scale  # 格子点間の距離
-    #c2 = param.color2.ctoi()  # 前景色(パッチ基本色)
     w, h = param.width * scale, param.height * scale  # 画像サイズ
-    lattice = polkadot_preserv['lattice']  # 格子タイプ(TRIANGULAR|SQUARE)
+    lattice = polkadot_preserv['lattice']  # 格子タイプ
+    gradbias = polkadot_preserv['gradation']  # グラデーションタイプ
+
+    c2 = np.array(param.color2.ctoi(), dtype=np.float32)  # 前景色(パッチ基本色)
+    c3 = np.array(param.color3.ctoi(), dtype=np.float32)  # 前景色グラデ
 
     W = w + 4*r
     H = h + 4*r
+    XL = max(W,H)/2
+    XL2 = XL*XL
     
     img = np.zeros((H, W, 3), dtype=np.float32)
     alpha = np.zeros((H, W), dtype=np.float32)
@@ -579,14 +598,31 @@ def polkadot(param: Param):
     n_cols = int(W / v) + 2
 
     cx_base = np.arange(n_cols) * v
+    t=0  # no gradation or fallback
+    # print('PATCH:', patch.min(), patch.max())
+    # print(' MASK:', mask.min(), mask.max())
 
     for j in range(n_rows):
         cy = int(j * dy)
         offset = sf if (j % 2) else 0
         cx_row = (cx_base + offset).astype(int)
+        if gradbias == 1:  # vertical
+            t = cy/H
+        elif gradbias == 4:  # radial
+            ty = cy - H/2
+            ty2 = ty*ty
 
         for i in range(n_cols):
             cx = cx_row[i]
+
+            if gradbias == 2:  # horizontal
+                t = cx/W
+            elif gradbias == 3:  # diagonal
+                t = (cx+cy)/(W+H)
+            elif gradbias == 4:  # radial
+                tx = cx - W/2
+                t = (tx*tx+ty2)/XL2
+            t = np.clip(t, 0, 1)
 
             # --- 貼り付け位置（パッチ基準） ---
             y0 = cy - ps_y // 2
@@ -610,7 +646,9 @@ def polkadot(param: Param):
                 continue
 
             # --- 必ず同じサイズで切り出す（最重要） ---
-            sub_patch = patch[py0:py1, px0:px1]
+            color = (c2*(1 - t) + c3*t)  # Gradation
+            sub_patch = patch[py0:py1, px0:px1] * color
+            
             sub_mask  = mask[py0:py1, px0:px1]
             sub_img   = img[iy0:iy1, ix0:ix1]
             sub_alpha = alpha[iy0:iy1, ix0:ix1]
