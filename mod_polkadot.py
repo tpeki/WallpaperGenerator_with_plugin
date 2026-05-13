@@ -4,9 +4,9 @@ import inspect
 from wall_common import *
 import TkEasyGUI as sg
 
-COLOR1 = '#94867B'
-COLOR2 = '#E7CBAD'
-COLOR3 = '#94867B'
+COLOR1 = '#EFEF9C'
+COLOR2 = '#FFA684'
+COLOR3 = '#EFEF9C'
 RADIUS = 20
 DISTANCE = 120
 QUALITY = 2
@@ -22,17 +22,19 @@ LATRATIO = [(1, np.sqrt(3)/2, 0.5),  # Triangular h-space, v-space, phase-shift
 GRADBIAS = ['NOGRAD', 'VERTICAL', 'HORIZONTAL', 'DIAGONAL', 'RADIAL']
 
 polkadot_preserv = {'shape': None,
-                    'lattice': 0,  # TRIANGULAR
+                    'lattice': 2,  # DIAGONAL
                     'gradation': 0,  # NOGRAD
                     'funcs': None,
                     'arglists': None,
-                    'prevsets': {}
+                    'prevsets': {},
                     }
-STANDARD_ARGS = {} # 'shade':0, 'angle':215, 'shift':40}
+AASCALE=4
 
+# =========================
+# 形状登録デコレータ
+# =========================
 FN = {}  # 関数名
-AG = {}  # 引数名
-DF = {}  # デフォルト値
+DF = {}  # パラメータ名及びデフォルト値
 
 def regi(func):
     """
@@ -46,7 +48,6 @@ def regi(func):
     params = params[1:]
 
     FN[func.__name__] = func
-    AG[func.__name__] = [p.name for p in params]
     DF[func.__name__] = {
         p.name: p.default
         for p in params
@@ -55,7 +56,11 @@ def regi(func):
 
     return func
 
+
+# ==== プラグインAPI =====================================================
+# =========================
 # module基本情報
+# =========================
 def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, '水玉など',
                        {'color1':'背景色',
@@ -67,7 +72,9 @@ def intro(modlist: Modules, module_name):
                         })
     return module_name
 
+# =========================
 # おすすめパラメータ
+# =========================
 def default_param(p: Param):
     p.color1 = RGBColor(COLOR1)
     p.color2 = RGBColor(COLOR2)
@@ -81,13 +88,13 @@ def default_param(p: Param):
 # 詳細設定
 # =========================
 def confline(shape, current):
-    args = AG[shape]
+    args = DF[shape].keys()
     defaults = DF[shape]
     if shape in polkadot_preserv['prevsets']:
         prevsets = polkadot_preserv['prevsets'][shape]
     else:
         prevsets = DF[shape]
-    
+   
     line = [sg.Radio('', group_id='radio', key=shape,
                      default=True if shape == current else False),
             sg.Text(shape, size=(12,1))]
@@ -106,7 +113,7 @@ def confline(shape, current):
 def desc(p: Param):
     lat = clip(polkadot_preserv['lattice'], 0, len(LATTICES)-1)
     gra = clip(polkadot_preserv['gradation'], 0, len(GRADBIAS)-1)
-    
+   
     layout = [[sg.Text('[POLKADOT configure]   Lattice Type:'),
                sg.Combo(LATTICES,
                         default_value=LATTICES[lat],
@@ -114,12 +121,14 @@ def desc(p: Param):
                sg.Text('Gradation:'),
                sg.Combo(GRADBIAS,
                         default_value=GRADBIAS[gra],
-                        key='-gradation-', readonly=True),               
+                        key='-gradation-', readonly=True),              
                ]]
     curshape = polkadot_preserv['shape']
     for fn in polkadot_preserv['funcs']:
         layout.append(confline(fn, curshape))
-    layout.append([sg.Text('', expand_x=True),
+    layout.append([sg.Text('', size=(2,1)),
+                   sg.Button('Default',key='-rst-',background_color='#ffffdd'),
+                   sg.Text('', expand_x=True),
                    sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
                    sg.Button(' Done ', key='-ok-', background_color='#ddffdd'),
                    ])
@@ -132,6 +141,11 @@ def desc(p: Param):
         if ev == sg.WINDOW_CLOSED or ev == '-can-':
             change = False
             break
+        elif ev == '-rst-':
+            shape = va['radio']
+            prevsets = DF[shape]
+            for a in prevsets.keys():
+                wn[f'-{shape}_{a}-'].update(prevsets[a])
         elif ev == '-ok-':
             change = True
             lname = va['-lattice-']
@@ -140,7 +154,7 @@ def desc(p: Param):
             polkadot_preserv['gradation'] = GRADBIAS.index(gname)
             shape = va['radio']
             args = {}
-            for a in AG[shape]:
+            for a in DF[shape].keys():
                 args[a] = int(va[f'-{shape}_{a}-'])
             break
 
@@ -155,122 +169,51 @@ def desc(p: Param):
         return
                    
 
-# =========================
-# 保存パラメータがあれば返す
-# =========================
-def check_preservarg(name, value):
-    shape = polkadot_preserv['shape']
-    if shape in polkadot_preserv['prevsets']:
-        if name in polkadot_preserv['prevsets'][shape]:
-            return polkadot_preserv['prevsets'][shape][name]
-    return value
-
-def set_default(shape, arg, value):
-    global DF
-    DF[shape][arg] = value
+# ==== ドット形状関数 =====================================================
+# anydot(p,*, <name>=<default>, ...) -> mask: nparray, factor: nparray|None
+#  <name>=<default> 拡張設定画面の設定可能変数となる
+#  mask   ドットの形状のアルファチャネル
+#  factor ドット毎の陰影など
+#  色要素は _dot() では持たず、polkadot() の方で付与する
 
 # =========================
-# ドット毎グラデーション(明度)
-# =========================
-def luminance(x, y, R, shade, angle, shift):
-    """ shade : 0..255
-        angle : 度
-        shift : ％
-    """
-    if shade == 0:
-        lum = np.ones(np.broadcast(x, y).shape, dtype=np.float32)
-        return lum
-    
-    # --- グラデーション ---
-    angle = np.deg2rad(angle)
-    dx = np.sin(angle) * shift * R
-    dy = np.cos(angle) * shift * R
-
-    dist_grad = np.sqrt((x - dx)**2 + (y - dy)**2)
-
-    size = max(max(*x.shape),max(*y.shape))   
-    patch = np.zeros((size, size, 3), dtype=np.float32)
-    
-    grad = 1 - (dist_grad / R)
-    grad = np.clip(grad, 0, 1)
-
-    s = shade/255.0
-    lum = (1-s) + s*grad
-    return lum.astype(np.float32)
-
-
-# =========================
-# クリップ(型非依存)
-# =========================
-def clip(v, minimum, maximum):
-    return int(min(max(v,minimum),maximum))
-
-# =========================
-# 円パッチ生成（AA + グラデーション + 中心ずらし）
+# 円パッチ
 # =========================
 @regi
-def circle_dot(p: Param, *, shade=0, angle=215, shift=40):
-    gs = p.pdepth  # global scale
-    r = p.pwidth * gs
-    shade = np.clip(check_preservarg('shade', shade),0,255)
-    angle = check_preservarg('angle', angle)
-    shift = check_preservarg('shift', shift) / 100.0
+def disc(p: Param, *, shade=0, angle=215, shift=40):
+    shade = prevset('shade', shade, lo=0, hi=100)
+    angle = prevset('angle', angle)
+    shift = prevset('shift', shift) / 100.0
 
-    scale=4
-    R = r * scale
-    size = 2 * R + 1
-
-    y, x = np.ogrid[-R:R+1, -R:R+1]
+    R = get_R(p)
+    x, y = make_ogrid(R)
 
     # 円マスク（高解像度）
     dist_center = np.sqrt(x**2 + y**2)
     mask = (dist_center <= R).astype(np.float32)
 
     lum = luminance(x, y, R, shade, angle, shift)
-    patch = np.repeat(lum[..., None], 3, axis=2)
-    patch *= mask[..., None]
-    
-    # ---- SSAA ダウンサンプリング ----
-    h = size // scale
-    w = size // scale
-
-    patch = patch[:h*scale, :w*scale]
-    mask  = mask[:h*scale, :w*scale]
-
-    patch = patch.reshape(h, scale, w, scale, 3).mean(axis=(1, 3))
-    mask  = mask.reshape(h, scale, w, scale).mean(axis=(1, 3))
-    
-    eps = 1e-6
-    mask_safe = np.maximum(mask, eps)
-    patch = patch / mask_safe[..., None]
-    patch[mask <= eps] = 0
-
-    return patch, mask
+   
+    return finalize_patch(mask, factor=lum)
 
 # =========================
 # 六角ドット
 # =========================
 @regi
-def hex_dot(p: Param, *, inner_r=40, shade=0, angle=215, shift=40):
-    gs = p.pdepth  # global scale
-    r = p.pwidth * gs
+def hexnut(p: Param, *, inner_r=40, shade=15, angle=215, shift=45):
+    inner_r = prevset('inner_r', inner_r, lo=0, hi=99) / 100.0
+    shade = prevset('shade', shade, lo=0, hi=100)
+    angle = prevset('angle', angle)
+    shift = prevset('shift', shift) / 100.0
 
-    inner_r = clip(check_preservarg('inner_r', inner_r), 0, 99) / 100.0
-    shade = clip(check_preservarg('shade', shade),0,255)
-    angle = check_preservarg('angle', angle)
-    shift = check_preservarg('shift', shift) / 100.0
-    
-    scale=4
-    R = r * scale
-    size = 2 * R + 1
-    inner = R * inner_r
-
-    y, x = np.ogrid[-R:R+1, -R:R+1]
+    R = get_R(p)
+    x, y = make_ogrid(R)
 
     # --- 六角形マスク ---
+    inner = R * inner_r
     ax = np.abs(x)
     ay = np.abs(y)
-    
+   
     cond1 = ax <= R
     cond2 = ay <= (np.sqrt(3)/2) * R
     cond3 = ax + ay / np.sqrt(3) <= R
@@ -278,42 +221,19 @@ def hex_dot(p: Param, *, inner_r=40, shade=0, angle=215, shift=40):
     mask = ((cond1 & cond2 & cond3) & (~cond4)).astype(np.float32)
 
     lum = luminance(x, y, R, shade, angle, shift)
-    patch = np.repeat(lum[..., None], 3, axis=2)
-    patch *= mask[..., None]
-    
-    # --- SSAA ---
-    h = size // scale
-    w = size // scale
-
-    patch = patch[:h*scale, :w*scale]
-    mask  = mask[:h*scale, :w*scale]
-
-    patch = patch.reshape(h, scale, w, scale, 3).mean(axis=(1, 3))
-    mask  = mask.reshape(h, scale, w, scale).mean(axis=(1, 3))
-
-    return patch, mask
+   
+    return finalize_patch(mask, factor=lum)
 
 # =========================
-# アスタリスクパッチ
+# アスタリスク系星型
 # =========================
 @regi
-def spike_dot(p: Param, *, spikes=6, inner_r=40, shade=0, angle=215, shift=40):
-    gs = p.pdepth  # global scale
-    r = p.pwidth * gs
+def spike(p: Param, *, spikes=6, inner_r=40):
+    spikes = prevset('spikes', spikes, lo=3, hi=255)
+    inner_r = prevset('inner_r', inner_r, lo=0, hi=99) / 100.0
 
-    shade = clip(check_preservarg('shade', shade),0,255)
-    angle = check_preservarg('angle', angle)
-    shift = check_preservarg('shift', shift) / 100.0
-
-    # --- 星形半径 ---
-    spikes = clip(check_preservarg('spikes', spikes),3,255)
-    inner_r = clip(check_preservarg('inner_r', inner_r), 0, 99) / 100.0
-
-    scale = 4
-    R = r * scale
-    size = 2 * R + 1
-
-    y, x = np.ogrid[-R:R+1, -R:R+1]
+    R = get_R(p)
+    x, y = make_ogrid(R)
 
     # --- 極座標 ---
     theta = np.arctan2(y, x)
@@ -324,40 +244,21 @@ def spike_dot(p: Param, *, spikes=6, inner_r=40, shade=0, angle=215, shift=40):
     # --- マスク ---
     mask = (dist <= star_r).astype(np.float32)
 
-    lum = luminance(x, y, R, shade, angle, shift)
-    patch = np.repeat(lum[..., None], 3, axis=2)
-    patch *= mask[..., None]
+    return finalize_patch(mask)
 
-    # --- SSAA ---
-    h = size // scale
-    w = size // scale
-
-    patch = patch[:h*scale, :w*scale]
-    mask  = mask[:h*scale, :w*scale]
-
-    patch = patch.reshape(h, scale, w, scale, 3).mean(axis=(1, 3))
-    mask  = mask.reshape(h, scale, w, scale).mean(axis=(1, 3))
-
-    return patch, mask
 
 # =========================
-# 五芒星パッチ
+# 多角形系星型
 # =========================
 @regi
-def pentastar_dot(p: Param, *, spikes=5, shade=0, angle=215, shift=40):
-    gs = p.pdepth  # global scale
-    r = p.pwidth * gs
+def star(p: Param, *, spikes=5, shade=0, angle=215, shift=40):
+    spikes = prevset('spikes', spikes, lo=4, hi=255)
+    shade = prevset('shade', shade, lo=0, hi=100)
+    angle = prevset('angle', angle)
+    shift = prevset('shift', shift) / 100.0
 
-    spikes = clip(check_preservarg('spikes', spikes),5,255)
-    shade = clip(check_preservarg('shade', shade),0,255)
-    angle = check_preservarg('angle', angle)
-    shift = check_preservarg('shift', shift) / 100.0
-
-    scale = 4
-    R = r * scale
-    size = 2 * R + 1
-
-    y, x = np.ogrid[-R:R+1, -R:R+1]
+    R = get_R(p)
+    x, y = make_ogrid(R)
 
     # --- 頂点生成 ---
     inner_ratio = 0.38  # 五芒星っぽさのキモ
@@ -387,44 +288,21 @@ def pentastar_dot(p: Param, *, spikes=5, shade=0, angle=215, shift=40):
 
     mask = np.sum(cond, axis=-1) % 2
     mask = mask.astype(np.float32)
-
     lum = luminance(x, y, R, shade, angle, shift)
-    patch = np.repeat(lum[..., None], 3, axis=2)
-    patch *= mask[..., None]
 
-    # --- SSAA ---
-    h = size // scale
-    w = size // scale
-
-    patch = patch[:h*scale, :w*scale]
-    mask  = mask[:h*scale, :w*scale]
-
-    patch = patch.reshape(h, scale, w, scale, 3).mean(axis=(1, 3))
-    mask  = mask.reshape(h, scale, w, scale).mean(axis=(1, 3))
-
-    return patch, mask
+    return finalize_patch(mask, factor=lum)
 
 # =========================
-# 雪の結晶パッチ
+# 雪の結晶
 # =========================
 @regi
-def snowflake_dot(p: Param, *, shade=0, angle=215, shift=40,
-                  bthick=50, blength=50, btaper=70):
-    gs = p.pdepth  # global scale
-    r = p.pwidth * gs
+def snowflake(p: Param, *, bthick=50, blength=50, btaper=70):
+    bthick = prevset('bthick', bthick) / 100.0
+    blength = prevset('blength', blength) / 100.0
+    btaper = prevset('btaper', btaper) / 100.0
 
-    shade = clip(check_preservarg('shade', shade),0,255)
-    angle = check_preservarg('angle', angle)
-    shift = check_preservarg('shift', shift) / 100.0
-    bthick = check_preservarg('bthick', bthick) / 100.0
-    blength = check_preservarg('blength', blength) / 100.0
-    btaper = check_preservarg('btaper', btaper) / 100.0
-
-    scale = 4
-    R = r * scale
-    size = 2 * R + 1
-
-    y, x = np.ogrid[-R:R+1, -R:R+1]
+    R = get_R(p)
+    x, y = make_ogrid(R)
 
     # --- 距離関数（線への距離） ---
     def line_dist(px, py, angle):
@@ -471,38 +349,19 @@ def snowflake_dot(p: Param, *, shade=0, angle=215, shift=40,
     # --- 軽くぼかし（AA代わり） ---
     mask = np.clip(mask * 1.5, 0, 1)
 
-    lum = luminance(x, y, R, shade, angle, shift)
-    patch = np.repeat(lum[..., None], 3, axis=2)
-    patch *= mask[..., None]
+    return finalize_patch(mask)
 
-    # --- SSAA ---
-    h = size // scale
-    w = size // scale
 
-    patch = patch[:h*scale, :w*scale]
-    mask  = mask[:h*scale, :w*scale]
-
-    patch = patch.reshape(h, scale, w, scale, 3).mean(axis=(1, 3))
-    mask  = mask.reshape(h, scale, w, scale).mean(axis=(1, 3))
-
-    return patch, mask
-
+# =========================
+# クローバー
+# =========================
 @regi
-def clover_dot(p: Param, *, rotate=20, shade=0, angle=215, shift=40):
-    gs = p.pdepth
-    r = p.pwidth * gs
+def clover(p: Param, *, rotate=20, swirl=30):
+    rotate = prevset('rotate', rotate)
+    swirl = prevset('swirl', swirl, lo=0, hi=100)
 
-    rotate = check_preservarg('rotate', rotate)
-    shade = clip(check_preservarg('shade', shade), 0, 255)
-    angle = check_preservarg('angle', angle)
-    shift = check_preservarg('shift', shift) / 100.0
-
-    scale = 4
-    R = r * scale
-    size = 2 * R + 1
-
-    coords = np.arange(-R, R+1)
-    y, x = np.meshgrid(coords, coords, indexing='ij')
+    R = get_R(p)
+    x, y = make_coordgrid(R)
 
     # --- 正規化 ---
     xn = x / R
@@ -540,31 +399,270 @@ def clover_dot(p: Param, *, rotate=20, shade=0, angle=215, shift=40):
 
     center = (xn**2 + yn**2 < 0.4**2)
     mask = mask | center
-    #mask = np.logical_xor(mask, center)
     mask = mask.astype(np.float32)
+
+    if swirl > 0:
+        texture = swirl_marble(R, contrast=swirl/300)
+    else:
+        texture = None
     
-    lum = luminance(x, y, R, shade, angle, shift)
-    patch = np.repeat(lum[..., None], 3, axis=2)
-    patch *= mask[..., None]
+    return finalize_patch(mask, factor=texture)
 
-    # --- SSAA ---
-    h = size // scale
-    w = size // scale
 
-    patch = patch[:h*scale, :w*scale]
+# =========================
+# 渦巻 (may be orange as DC, red as Bakabon)
+# =========================
+@regi
+def whirl(p: Param, *, tight=38, thick=28, start=90):
+    tight = prevset('tight', tight)
+    dir = 1 if tight >= 0 else -1  # tight>0 CW, tight<0 CCW
+    tight = abs(tight)
+    thick = prevset('thick', thick)
+    start = np.deg2rad(prevset('start', start)%360)
+
+    R = get_R(p)
+    X, Y = make_uvgrid(R)
+
+    rad = np.sqrt(X**2+Y**2)
+    phi = np.arctan2(Y,X)
+   
+    freq = 4 + tight*0.4
+    #spiral = np.sin(phi+rad*freq)
+   
+    phase = (start + phi - dir*rad*freq) % (2*np.pi)
+    mask = phase < thick * 0.1
+
+    mask[rad < 0.10] = 0
+    mask[rad > 0.95] = 0
+
+    return finalize_patch(mask)
+
+
+# =========================
+# 絣模様 (PIL系)
+# =========================
+@regi
+def sharp(p: Param, *, lean=5, pitch=40, arc=18):
+    lean = prevset('lean', lean)%360  # ドットの傾き
+    pitch = prevset('pitch', pitch)  # 線の間隔
+    thick=5  # 線幅は固定に
+    arcthick = prevset('arc', arc)/10.0 + 1.0  # 縦線円弧のBBOX幅
+    sang, eang = 106, 268  # 円弧の開始・終点角
+
+    R = get_R(p)
+    size, img = make_canvas(R)
+    
+    drw = ImageDraw.Draw(img)
+
+    pitch = size*pitch/100
+    pen = max((size*thick)//50,4)
+    arcthick = max(pen*arcthick, 10)
+    e = arcthick // 4
+    sx = clip((size-pitch-arcthick/2)//2,0,size)
+    sy = clip((size-pitch)//2,0,size)
+
+    for d in (0,1):
+        drw.arc((sx, 0, sx+arcthick, size), sang, eang, fill=255, width=pen)
+        drw.line((e, sy, size-e, sy), fill=255, width=pen)
+        sx += pitch
+        sy += pitch
+    img = img.rotate(-lean, resample=Image.BILINEAR, expand=False)
+   
+    return finalize_patch(img)
+
+
+# ==== サポート関数 =====================================================
+# =========================
+# 保存パラメータがあれば返す
+# =========================
+def prevset(name, value, lo=None, hi=None):
+    shape = polkadot_preserv['shape']
+    retv = (
+        polkadot_preserv['prevsets']
+        .get(shape,{})
+        .get(name, value)
+        )
+    
+    if lo is not None:
+        retv = max(lo, retv)
+    if hi is not None:
+        retv = min(retv, hi)
+    
+    return retv
+
+def set_default(shape, arg, value):
+    global DF
+    DF[shape][arg] = value
+
+
+# =========================
+# グリッド生成
+# =========================
+def get_R(p: Param, scale=AASCALE):
+    gs = p.pdepth  # global scale
+    r = p.pwidth * gs
+
+    return r * scale
+
+    
+def make_ogrid(R):
+    """R:サイズ -> x, y: Broadcast用配列 [2R+1,1],[1,2R+1]"""
+    y, x = np.ogrid[-R:R+1, -R:R+1]
+   
+    return x, y  # ブロードキャスト処理の前提
+
+def make_uvgrid(R):
+    """R:サイズ -> X, Y: メッシュ配列 値域は正規化(-1..1)"""
+    u = np.linspace(-1, 1, 2*R+1, dtype=np.float32)
+    Y, X = np.meshgrid(u, u, indexing='ij')
+   
+    return X, Y  # 数式で表せる図形向き
+
+def make_coordgrid(R):
+    """R:サイズ -> X, Y:  メッシュ配列 値域は座標値(-R .. R+1)"""
+    coords = np.arange(-R, R+1)
+    y, x = np.meshgrid(coords, coords, indexing='ij')
+
+    return x, y  # ピクセル位置を利用した計算向き
+
+def make_canvas(R):
+    """PILで作る方が早いdot向け
+       finalize には numpy配列 の代わりに img を渡す"""
+    size = 2 * R
+    img = Image.new('L', (size,size), 0)
+
+    return size, img
+
+# =========================
+# factor(scalar) ドット毎グラデーション(明度)
+# =========================
+def luminance(x, y, R, shade, angle, shift):
+    """shade : 0..100, angle : 0..359, shift : 0..100"""
+    if shade == 0:
+        return None
+   
+    # --- グラデーション ---
+    angle = np.deg2rad(angle)
+    dx = np.sin(angle) * shift * R
+    dy = np.cos(angle) * shift * R
+
+    dist2 = (x - dx)**2 + (y - dy)**2
+    grad = 1 - dist2 / R**2
+    grad = np.clip(grad, 0, 1)
+
+    s = shade/100.0
+    lum = (1-s) + s*grad
+
+    return lum.astype(np.float32)
+
+def swirl_marble(R,
+                 freq=10,
+                 swirl=6,
+                 wobble=0.25,
+                 contrast=0.22,
+                 rgb=False):
+
+    X, Y = make_uvgrid(R)
+
+    rad = np.sqrt(X*X + Y*Y)
+    phi = np.arctan2(Y, X)
+
+    # 流れ方向を歪ませる
+    flow = (
+        rad * freq
+        + phi * swirl
+        + wobble * np.sin(phi * 5 + rad * 8)
+    )
+
+    base = (
+        1.0
+        + contrast * np.sin(flow)
+    ).astype(np.float32)
+
+    if rgb:
+
+        factor = np.dstack([
+            base * 0.92,
+            base * 1.00,
+            base * 1.08,
+        ]).astype(np.float32)
+
+        factor = np.clip(factor, 0, 1)
+
+    else:
+        factor = np.clip(base, 0, 1)
+
+    return factor
+
+
+# =========================
+# アンチエイリアス(SSAA)仕上
+# =========================
+def finalize_patch(mask, factor=None, scale=AASCALE):
+    """mask: shape, factor: shade/texture """
+    if type(mask) == Image.Image:
+        mask = np.array(mask, dtype=np.float32) / 255.0  # numpy配列化
+
+    H, W = mask.shape
+    h = H // scale
+    w = W // scale
+
     mask  = mask[:h*scale, :w*scale]
-
-    patch = patch.reshape(h, scale, w, scale, 3).mean(axis=(1, 3))
     mask  = mask.reshape(h, scale, w, scale).mean(axis=(1, 3))
+   
+    if factor is not None:
+        factor = factor[:h*scale, :w*scale]
+        factor = factor.reshape(h, scale, w, scale).mean(axis=(1, 3))
+        if factor.ndim == 3:
+            factor *= mask[...,None]
+        else:
+            factor *= mask
 
-    return patch, mask
+    return mask, factor    
 
 
+# =========================
+# クリップ(int)
+# =========================
+def clip(v, minimum, maximum):
+    return int(min(max(v,minimum),maximum))
+
+
+# =========================
+# パッチ配置
+# =========================
+def clip_box(x0, y0, pw, ph, W, H):
+    x1 = x0 + pw
+    y1 = y0 + ph
+
+    # patch側
+    px0 = max(0, -x0)
+    py0 = max(0, -y0)
+
+    px1 = min(pw, W - x0)
+    py1 = min(ph, H - y0)
+
+    # 完全画面外
+    if px0 >= px1 or py0 >= py1:
+        return None
+
+    # image側
+    ix0 = max(0, x0)
+    iy0 = max(0, y0)
+
+    ix1 = ix0 + (px1 - px0)
+    iy1 = iy0 + (py1 - py0)
+
+    return (px0, py0, px1, py1,  # patch bbox
+            ix0, iy0, ix1, iy1)  # image bbox
+
+
+# ==== メイン処理 =====================================================
 # =========================
 # 格子配置
 # =========================
 def polkadot(param: Param):
-    scale = clip(int(param.pdepth), 1, 4)
+    scale = clip(param.pdepth, 1, 4)
     r = param.pwidth * scale  # パッチ基本サイズ
     v = param.pheight * scale  # 格子点間の距離
     w, h = param.width * scale, param.height * scale  # 画像サイズ
@@ -578,34 +676,38 @@ def polkadot(param: Param):
     H = h + 4*r
     XL = max(W,H)/2
     XL2 = XL*XL
-    
+   
     img = np.zeros((H, W, 3), dtype=np.float32)
     alpha = np.zeros((H, W), dtype=np.float32)
 
     shape = polkadot_preserv['shape']
     if shape in polkadot_preserv['funcs']:
-        patch, mask = FN[shape](param)
+        mask, factor = FN[shape](param)
     else:
-        patch, mask = circle_dot(param)
-    ps_y, ps_x = patch.shape[:2]
+        mask, factor = circle_dot(param)
+    ps_y, ps_x = mask.shape
+    hf_y, hf_x = ps_y//2, ps_x//2
+    is_factor_rgb = (factor is not None and factor.ndim == 3)
 
     lattice = clip(lattice, 0, len(LATTICES)-1)
     dy = v * LATRATIO[lattice][1]
     v = v * LATRATIO[lattice][0]  # 順番大事
     sf = v * LATRATIO[lattice][2]
-    
+   
     n_rows = int(H / dy) + 2
     n_cols = int(W / v) + 2
 
-    cx_base = np.arange(n_cols) * v
     t=0  # no gradation or fallback
-    # print('PATCH:', patch.min(), patch.max())
-    # print(' MASK:', mask.min(), mask.max())
 
-    for j in range(n_rows):
-        cy = int(j * dy)
-        offset = sf if (j % 2) else 0
-        cx_row = (cx_base + offset).astype(int)
+    cx_base = np.arange(n_cols) * v
+    cx_even = cx_base.astype(np.int32)
+    cx_odd  = (cx_base + sf).astype(np.int32)
+
+    cy_rows = (np.arange(n_rows) * dy).astype(np.int32)
+ 
+    for j, cy in enumerate(cy_rows):
+        cx_row = cx_odd if (j & 1) else cx_even
+        
         if gradbias == 1:  # vertical
             t = cy/H
         elif gradbias == 4:  # radial
@@ -623,39 +725,37 @@ def polkadot(param: Param):
                 tx = cx - W/2
                 t = (tx*tx+ty2)/XL2
             t = np.clip(t, 0, 1)
+            
+            color = (c2*(1-t) + c3*t).astype(np.float32)
 
             # --- 貼り付け位置（パッチ基準） ---
-            y0 = cy - ps_y // 2
-            x0 = cx - ps_x // 2
-            y1 = y0 + ps_y
-            x1 = x0 + ps_x
+            y0, x0 = cy - hf_y, cx - hf_x
+            y1, x1 = y0 + ps_y, x0 + ps_x
 
             # --- クリッピング ---
-            py0 = max(0, -y0)
-            px0 = max(0, -x0)
-            py1 = min(ps_y, H - y0)
-            px1 = min(ps_x, W - x0)
+            clipped = clip_box(x0, y0, ps_x, ps_y, W, H)
 
-            iy0 = max(0, y0)
-            ix0 = max(0, x0)
-            iy1 = iy0 + (py1 - py0)
-            ix1 = ix0 + (px1 - px0)
-
-            # 空ならスキップ
-            if py0 >= py1 or px0 >= px1:
+            if clipped is None:
                 continue
 
-            # --- 必ず同じサイズで切り出す（最重要） ---
-            color = (c2*(1 - t) + c3*t)  # Gradation
-            sub_patch = patch[py0:py1, px0:px1] * color
-            
+            px0, py0, px1, py1, ix0, iy0, ix1, iy1 = clipped
+
+            # 切り出し
             sub_mask  = mask[py0:py1, px0:px1]
             sub_img   = img[iy0:iy1, ix0:ix1]
             sub_alpha = alpha[iy0:iy1, ix0:ix1]
-            
+
+            sub_patch = color
+            #sub_patch = color.copy()  # 安全寄り
+
+            if factor is not None:
+                sub_factor = factor[py0:py1, px0:px1]
+                sub_patch = sub_patch * (sub_factor if is_factor_rgb
+                                         else sub_factor[..., None]) 
+
             mask3 = sub_mask[..., None]
             sub_img[:] = sub_img * (1 - mask3) + sub_patch * mask3
-            sub_alpha[:] = np.maximum(sub_alpha, sub_mask)
+            sub_alpha[:] = (sub_alpha + sub_mask*(1 - sub_alpha))
 
     img = np.clip(img, 0, 255).astype(np.uint8)
     alpha = np.clip(alpha * 255, 0, 255).astype(np.uint8)
@@ -670,21 +770,20 @@ def polkadot(param: Param):
 def generate(p):
     if polkadot_preserv['funcs'] is None:
         polkadot_preserv['funcs'] = list(FN.keys())
-        polkadot_preserv['arglists'] = AG
+        polkadot_preserv['arglists'] = {
+            k : list(DF[k].keys())
+            for k in polkadot_preserv['funcs']
+            }
 
     if polkadot_preserv['shape'] is None:
         polkadot_preserv['shape'] = polkadot_preserv['funcs'][0]
-
     shape = polkadot_preserv['shape']
-    for a in polkadot_preserv['arglists'][shape]:
-        if a in STANDARD_ARGS:
-            polkadot_preserv['args'][a] = STANDARD_ARGS[a]
 
-    scale = clip(int(p.pdepth), 1, 4)
+    scale = clip(p.pdepth, 1, 4)
     W = p.width * scale
     H = p.height * scale
     dot_img = polkadot(p)
-    
+   
     if p.h_img is not None:
         bg = p.bg(W, H).convert('RGBA')
     else:
@@ -706,5 +805,3 @@ if __name__ == '__main__':
 
     im = generate(p)
     im.show()
-    
-
