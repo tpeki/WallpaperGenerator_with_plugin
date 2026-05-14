@@ -1,5 +1,6 @@
 import re
 import copy
+import os.path as pa
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance
 import TkEasyGUI as sg
@@ -71,34 +72,52 @@ def default_param(p: Param):
     p.pheight = DUTY
     return p
 
-
 # ----
 # セットエディタ
 # ----
 def layout():
-    left = sg.Image(key='-test-', size=(300,300))
-    macros = [[sg.Button('Rewrite', key='-t_rwt-'),
-               sg.Button('2X', key='-t_dbl-'),
-               sg.Button('1/2', key='-t_hlf-'), ],
-              [sg.Button('Flip&Paste', key='-t_flp-')],
+    preview = sg.Image(key='-test-', size=(360,360))
+    macros = [[sg.Button('Flip&Paste', key='-t_flp-', text_color='#ffffff',
+                        background_color='#013070', expand_x=True),
+               ],
+              [sg.Button('2X', key='-t_dbl-', size=(3,1), text_color='#ffffff',
+                        background_color='#013070', expand_x=True),
+               sg.Button('1/2', key='-t_hlf-', size=(3,1), text_color='#ffffff',
+                        background_color='#013070', expand_x=True),
+               ],
               ]
-    right = [[sg.Text('Pallet'),
-              sg.Image(key='-pallet-', size=(136,56), enable_events=True),
-              sg.Text('', expand_x=True),
-              sg.Column(macros, expand_x=True),
+    palette = [[sg.Text('Pallet'),
+                sg.Image(key='-pallet-', size=(136,56), enable_events=True),
+                #sg.Image(size=(2,80), enable_events=True),
+                ],
+               ]
+              
+    right = [[sg.Multiline('', key='-t_pat-',size=(20,12),
+                           background_color='#f0eea0', text_align='left',
+                           expand_x=True, expand_y=True)
               ],
-             [sg.Multiline('', key='-t_pat-',size=(20,12),
-                           background_color='#f0eea0',
-                           text_align='left',
-                           expand_x=True, expand_y=True)],
-             [sg.Button('Delete', key='-t_del-'),
+             [sg.Button('Delete Line', key='-t_del-', text_color='#ffffff',
+                        background_color='#601001'),
+              sg.Text('', expand_x=True),
+              sg.Button('Clear', key='-t_clr-', text_color='#ffffff',
+                        background_color='#601001'),
+              sg.Button('Read&CleanUp', key='-t_rwt-', text_color='#ffffff',
+                        background_color='#707001'),
+              ],
+             [sg.Column(palette, vertical_alignment='top',
+                        expand_x=True),
+              sg.Column(macros, vertical_alignment='top',
+                        expand_x=True),
+              ],
+             [sg.Button('Add Line', key='-t_add-', text_color='#ffffff',
+                        background_color='#106001'),
               sg.Text('C:',text_align='right', size=(4,1)),
               sg.Text('', key='-t_col-', size=(2,1)),
               sg.Text('', key='-t_ctp-', size=(10,1)),
               sg.Text(' W:'),
               sg.Input('', key='-t_wth-', size=(4,1),
                        background_color='#f0eea0'),
-              sg.Button('Add', key='-t_add-'),]
+              ],
              ]
     
     buttons = [sg.Text('File'),
@@ -106,14 +125,18 @@ def layout():
                         readonly=True, expand_x=True),
                sg.Button('Load', key='-t_ld-'),
                sg.Button('Save', key='-t_sv-'),
-               sg.Text('', size=(2,1)),
-               sg.Button('Clear', key='-t_clr-', background_color='#ddddff'),
+               #sg.Text('', size=(2,1)),
                sg.Text('', size=(2,1), expand_x=True),
                sg.Button('Cancel', key='-t_can-', background_color='#ffdddd'),
                sg.Button('Apply', key='-t_ok-', background_color='#ddffdd'),
                ]
 
-    return [[left, sg.Column(layout=right, expand_x=True, expand_y=True)],
+    return [[sg.Text('Tartan set editor:'),
+             sg.Text(expand_x=True),
+             sg.Text('# press "CleanUp" after direct edit.'),
+             ],
+            [preview, sg.Frame('', layout=right, relief='ridge',
+                            pad=(2,4), expand_x=True, expand_y=True)],
             buttons]
 
 
@@ -123,6 +146,15 @@ def ttnfile_list(directory=DATA_DIR):
     files = [fn.replace('.ttn','') \
              for fn in glob_filelistz(patn, add_zip=ZIPFILE)]
     return files
+
+# 捜索範囲にファイル名があるか
+def search_file(filename, directory=DATA_DIR):
+    """存在すれば対象ファイル名を返却"""
+    target = pa.splitext(pa.basename(filename))[0]
+    if target in ttnfile_list():
+        return target+'.ttn'
+    else:
+        return None
 
 
 # パレット画像の生成
@@ -221,7 +253,7 @@ def load_pattern(fname):
     # print(fname)
     buf = read_filez(fname, add_zip=ZIPFILE)
     if buf is None or buf == []:
-        return [], 0
+        return [], BASE_COLOR.copy()
 
     cset = [None]*10
     pat = []
@@ -294,7 +326,11 @@ def desc(p: Param):
     for i in range(3):
         org_color.append(getattr(p, f'color{i+1}'))
     p.width, p.height = patw, patw
-    
+
+    current = search_file(p.savefile + '.ttn')
+    wn['-t_file-'].update('' if current is None else p.savefile)
+    #print(p.savefile, '##', current)
+
     img = generate(p, pattern=pat)
     wn['-test-'].update(data=img)
     flist = ttnfile_list()
@@ -334,29 +370,42 @@ def desc(p: Param):
             w = int(wn['-t_wth-'].get())
             pat.append((c,w))
         elif ev == '-t_del-':  # 最終行を削除
-            pat.pop()
+            if len(pat) > 0:
+                pat.pop()
+            else:
+                continue
         elif ev == '-t_clr-':  # セットを初期化
             pat = []
         elif ev == '-t_ld-':  # 読み込み
-            fname = wn['-t_file-'].get()
-            if fname != '' and fname is not None:
-                old_cset = copy.copy(cset)
-                pat, cset = load_pattern(fname+'.ttn')
-                # wn['-t_file-'].update(fname)
+            fname = wn['-t_file-'].get()+'.ttn'
+            fname = search_file(fname)
+            if fname is None:
+                continue
+            elif fname != '':
+                old_cset = cset.copy()
+                pat, cset = load_pattern(fname)
+                # print(pat, cset)
                 if cset != old_cset:
                     pimg = palimg(cset)
                     wn['-pallet-'].update(data=pimg)
                     
-                p.savefile = fname
+                p.savefile = pa.splitext(fname)[0]
         elif ev == '-t_sv-':  # 保存
-            oldf = wn['-t_file-'].get()+'.ttn'
+            current = wn['-t_file-'].get()
+            # print(f'Fname: "{current}", {p.pattern}')
+            if current == '' or current is None:
+                current = p.pattern if p.pattern != '' else 'test_set'
+            oldf = current+'.ttn'
             fname = get_savefile(oldf, filetypes=[('Tartan set','*.ttn'),],
                                  init_dir=DATA_DIR)
             frush_ev(wn)
             if fname != '' and fname is not None:
                 save_pattern(fname, pat, cset)
-                wn['-t_file-'].update(fname)
+                fname = pa.splitext(pa.basename(fname))[0]
                 p.savefile = fname
+            else:
+                fname = ''
+            wn['-t_file-'].update(fname)
             flist = ttnfile_list()
             wn['-t_file-'].update(values=flist)
             continue
