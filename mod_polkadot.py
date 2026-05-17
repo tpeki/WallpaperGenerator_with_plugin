@@ -14,12 +14,13 @@ QUALITY = 2
 LATTICES=['TRIANGULAR','SQUARE','DIAGONAL','ISOMETRIC',
           ]
 LATRATIO = [(1, np.sqrt(3)/2, 0.5),  # Triangular h-space, v-space, phase-shift
-            (1, 1, 0),
-            (np.sqrt(2), np.sqrt(2)/2, 0.5),
-            (np.sqrt(3), 0.5, 0.5),
+            (1, 1, 0),               # Square
+            (np.sqrt(2), np.sqrt(2)/2, 0.5),  # Diagonal
+            (np.sqrt(3), 0.5, 0.5),  # Isometric
             ]
 
 GRADBIAS = ['NOGRAD', 'VERTICAL', 'HORIZONTAL', 'DIAGONAL', 'RADIAL']
+MIDP_SHAPE = ['Disc', 'Plus', 'Ring']
 
 polkadot_preserv = {'shape': None,
                     'lattice': 2,  # DIAGONAL
@@ -27,6 +28,7 @@ polkadot_preserv = {'shape': None,
                     'funcs': None,
                     'arglists': None,
                     'prevsets': {},
+                    'midpoint': [0, 0],
                     }
 AASCALE=4
 
@@ -113,6 +115,10 @@ def confline(shape, current):
 def desc(p: Param):
     lat = clip(polkadot_preserv['lattice'], 0, len(LATTICES)-1)
     gra = clip(polkadot_preserv['gradation'], 0, len(GRADBIAS)-1)
+    midr, mids = polkadot_preserv['midpoint']
+    midp = midr > 0
+    midr = max(midr, 0)
+    mids = clip(mids, 0, len(MIDP_SHAPE)-1)
    
     layout = [[sg.Text('[POLKADOT configure]   Lattice Type:'),
                sg.Combo(LATTICES,
@@ -126,11 +132,24 @@ def desc(p: Param):
     curshape = polkadot_preserv['shape']
     for fn in polkadot_preserv['funcs']:
         layout.append(confline(fn, curshape))
-    layout.append([sg.Text('', size=(2,1)),
-                   sg.Button('Default',key='-rst-',background_color='#ffffdd'),
-                   sg.Text('', expand_x=True),
-                   sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
-                   sg.Button(' Done ', key='-ok-', background_color='#ddffdd'),
+    layout.extend([[sg.Checkbox('', default=midp, key='-midp-'),
+                    sg.Text('Midpoint', size=(12,1)),
+                    sg.Text('Radius'),
+                    sg.Input(f'{midr}',key='-midr-', width=4),
+                    sg.Text('%    Shape'),
+                    sg.Combo(MIDP_SHAPE, size=(6,1),
+                        default_value=MIDP_SHAPE[mids],
+                        key='-mids-', readonly=True),
+                    ],
+                   [sg.Text('', size=(2,1)),
+                    sg.Button('Default',key='-rst-',
+                              background_color='#ffffdd'),
+                    sg.Text('', expand_x=True),
+                    sg.Button('Cancel', key='-can-',
+                              background_color='#ffdddd'),
+                    sg.Button(' Done ', key='-ok-',
+                              background_color='#ddffdd'),
+                    ]
                    ])
     wn = sg.Window('Configure', layout=layout, modal=True)
 
@@ -146,6 +165,13 @@ def desc(p: Param):
             prevsets = DF[shape]
             for a in prevsets.keys():
                 wn[f'-{shape}_{a}-'].update(prevsets[a])
+        elif ev == '-midp-':
+            if va['-midp-']:  # OFF -> ON
+                midr = 30
+            else:             # ON -> OFF
+                midr = 0
+            wn['-midr-'].update(f'{midr}')
+            midp = not midp
         elif ev == '-ok-':
             change = True
             lname = va['-lattice-']
@@ -155,14 +181,25 @@ def desc(p: Param):
             shape = va['radio']
             args = {}
             for a in DF[shape].keys():
-                args[a] = int(va[f'-{shape}_{a}-'])
+                try:
+                    args[a] = int(va[f'-{shape}_{a}-'])
+                except ValueError:
+                    args[a] = DF[shape][a]
+            try:
+                midr = max(int(va['-midr-']),1) if midp else 0
+            except ValueError:
+                midr = 1
+            midn = va['-mids-']
+            mids = MIDP_SHAPE.index(midn)
             break
+        wn.refresh()
 
     wn.close()
 
     if change:
         polkadot_preserv['shape'] = shape
-        polkadot_preserv['prevsets'][shape] = args
+        polkadot_preserv['prevsets'][shape] = args        
+        polkadot_preserv['midpoint'] = [midr,mids]
         new_img = generate(p)
         return new_img
     else:
@@ -471,6 +508,45 @@ def sharp(p: Param, *, lean=5, pitch=40, arc=18):
     return finalize_patch(img)
 
 
+# =========================
+# 中間点
+# =========================
+def midpoint(p: Param, ratio, shape, scale=4):
+    dotR = p.pwidth
+    gs = p.pdepth * scale
+    ratio = ratio/100.0
+    lwidth = 3
+    
+    R = dotR * ratio
+    if shape == 1:
+        R = max(R, lwidth*2)  # 十字の中心は lwidth x lwidth
+    elif shape == 2:
+        R = max(R, lwidth*3)  # リング幅=lwidth, 内径=lwidth 
+
+    #print(dotR, ratio, shape, 'R=', R)
+
+    R = R * gs
+    lwidth = lwidth * gs
+    
+    x, y = make_ogrid(R)
+
+
+    if shape == 0:  # 円マスク
+        dist = np.sqrt(x**2 + y**2)
+        mask = (dist <= R).astype(np.float32)
+    elif shape == 1:  # 十字マスク
+        half_w = lwidth / 2
+        vertical_bar = (np.abs(x) <= half_w) & (np.abs(y) <= R)
+        horizontal_bar = (np.abs(y) <= half_w) & (np.abs(x) <= R)
+
+        mask = (vertical_bar | horizontal_bar).astype(np.float32)
+    else:  # elif shape == 3:
+        dist = np.sqrt(x**2 + y**2)
+        inner = R - lwidth*2
+        mask = ((dist <= R) & (dist >= inner)).astype(np.float32)
+        
+    return finalize_patch(mask)
+
 # ==== サポート関数 =====================================================
 # =========================
 # 保存パラメータがあれば返す
@@ -672,8 +748,8 @@ def polkadot(param: Param):
     c2 = np.array(param.color2.ctoi(), dtype=np.float32)  # 前景色(パッチ基本色)
     c3 = np.array(param.color3.ctoi(), dtype=np.float32)  # 前景色グラデ
 
-    W = w + 4*r
-    H = h + 4*r
+    W = w + v + 4*r
+    H = h + v + 4*r
     XL = max(W,H)/2
     XL2 = XL*XL
    
@@ -693,7 +769,18 @@ def polkadot(param: Param):
     dy = v * LATRATIO[lattice][1]
     v = v * LATRATIO[lattice][0]  # 順番大事
     sf = v * LATRATIO[lattice][2]
-   
+
+    midf = False
+    if lattice in (1,2):
+        midr, mids = polkadot_preserv['midpoint']
+        if midr > 0:
+            midp, _ = midpoint(param, midr, mids)
+            ms_y, ms_x = midp.shape
+            mh_y, mh_x = ms_y//2, ms_x//2
+            md_y = int(dy//2) if lattice == 1 else 0
+            md_x = int(v//2)
+            midf = True
+  
     n_rows = int(H / dy) + 2
     n_cols = int(W / v) + 2
 
@@ -728,40 +815,56 @@ def polkadot(param: Param):
             
             color = (c2*(1-t) + c3*t).astype(np.float32)
 
-            # --- 貼り付け位置（パッチ基準） ---
-            y0, x0 = cy - hf_y, cx - hf_x
-            y1, x1 = y0 + ps_y, x0 + ps_x
-
-            # --- クリッピング ---
-            clipped = clip_box(x0, y0, ps_x, ps_y, W, H)
-
-            if clipped is None:
-                continue
-
-            px0, py0, px1, py1, ix0, iy0, ix1, iy1 = clipped
-
-            # 切り出し
-            sub_mask  = mask[py0:py1, px0:px1]
-            sub_img   = img[iy0:iy1, ix0:ix1]
-            sub_alpha = alpha[iy0:iy1, ix0:ix1]
-
-            sub_patch = color
-            #sub_patch = color.copy()  # 安全寄り
-
-            if factor is not None:
-                sub_factor = factor[py0:py1, px0:px1]
-                sub_patch = sub_patch * (sub_factor if is_factor_rgb
-                                         else sub_factor[..., None]) 
-
-            mask3 = sub_mask[..., None]
-            sub_img[:] = sub_img * (1 - mask3) + sub_patch * mask3
-            sub_alpha[:] = (sub_alpha + sub_mask*(1 - sub_alpha))
+            place(cx, cy, ps_x, ps_y, hf_x, hf_y, W, H,
+                  mask, factor, color, img, alpha)
+            
+            if midf:
+                place(int(cx+md_x), int(cy+md_y), ms_x, ms_y, mh_x, mh_y, W, H,
+                      midp, None, color, img, alpha)
 
     img = np.clip(img, 0, 255).astype(np.uint8)
     alpha = np.clip(alpha * 255, 0, 255).astype(np.uint8)
     rgba = np.dstack([img, alpha])
 
-    return Image.fromarray(rgba[r*2:r*2+h, r*2:r*2+w], mode='RGBA')
+    ox = (W - w)//2
+    oy = (H - h)//2
+
+    return Image.fromarray(rgba[oy:oy+h, ox:ox+w], mode='RGBA')
+
+
+def place(cx, cy, ps_x, ps_y, hf_x, hf_y, W, H,
+          mask, factor, color, img, alpha):
+    
+    # --- 貼り付け位置（パッチ基準） ---
+    y0, x0 = cy - hf_y, cx - hf_x
+    y1, x1 = y0 + ps_y, x0 + ps_x
+
+    # --- クリッピング ---
+    clipped = clip_box(x0, y0, ps_x, ps_y, W, H)
+
+    if clipped is None:
+        return
+
+    px0, py0, px1, py1, ix0, iy0, ix1, iy1 = clipped
+
+    # 切り出し
+    sub_mask  = mask[py0:py1, px0:px1]
+    sub_img   = img[iy0:iy1, ix0:ix1]
+    sub_alpha = alpha[iy0:iy1, ix0:ix1]
+
+    sub_patch = color
+    #sub_patch = color.copy()  # 安全寄り
+
+    if factor is not None:
+        sub_factor = factor[py0:py1, px0:px1]
+        sub_patch = sub_patch * (sub_factor if is_factor_rgb
+                                 else sub_factor[..., None]) 
+
+    mask3 = sub_mask[..., None]
+    sub_img[:] = sub_img * (1 - mask3) + sub_patch * mask3
+    sub_alpha[:] = (sub_alpha + sub_mask*(1 - sub_alpha))
+
+    return  
 
 
 # =========================
