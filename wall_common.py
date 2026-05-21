@@ -4,7 +4,7 @@ import random
 import re
 import copy
 import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageColor
 import os.path as pa
 import colorsys
 
@@ -347,43 +347,46 @@ def diagonal_gradient_rgb(width, height, color1:RGBColor, color2:RGBColor):
 
 
 def rgb_string(*args):
-    '''R,G,Bの数値を16進文字列にする'''
-    if len(args) == 1 and isinstance(args[0], (tuple, list)):
-        r,g,b = args[0][:3]
-    elif len(args) == 3:
-        r,g,b = args
-    else:
-        raise ValueError('Parameter will be 3 int or 1 tuple')
-    
-    if not all(isinstance(x, int) for x in (r,g,b)):
-        raise ValueError('Parameters must be integer')
-    
-    r = clip8(r)
-    g = clip8(g)
-    b = clip8(b)
-    return f'#{r:02x}{g:02x}{b:02x}'
-
-
-def to_rgb(value):
-    '''(r,g,b)もしくは'#rrggbb'を受け取って、r,g,bを返す'''
-    if isinstance(value, tuple):
-        if len(value) < 3:
-            raise ValueError('Tuple too short')
-        r,g,b = value[:3]
-        if all(isinstance(x, int) for x in (r,g,b)):
-            return clip8(r), clip8(g), clip8(b)
-        else:
-            raise ValueError('Tuple has not integer')
-    if isinstance(value, str) and len(value) >= 6:
-        if value[0] == '#':
-            value = value[1:]
+    """"文字列、タプル、RGBColorの値を'#rrggbbに変換"""
+    x = args[0] if len(args)==1 else args
+    if isinstance(x, str):
         try:
-            rgb = [int(value[i*2:i*2+2], 16) for i in range(3)]
-            return tuple(rgb)
+            _ = ImageColor.getrgb(x)
+            return x
         except ValueError:
-            raise ValueError('Hexadecimal is not correct')
-    raise ValueError('Invalid format')
-            
+            return None
+    rgb = to_rgb(x)
+    if rgb is None:
+        return None
+    else:
+        s = '#'
+        for d in rgb[:min(len(rgb),4)]:
+            s += f'{d:02X}'
+        return s
+
+
+def to_rgb(*args):
+    """文字列、タプル、RGBColorの値を(r,g,b)に変換"""
+    x = args[0] if len(args)==1 else args
+    if isinstance(x,(list,tuple)):
+        if len(x)==3:
+            return tuple(clip8(int(t,0))
+                         if isinstance(t,str) else clip8(int(t))
+                         for t in x[:3])
+        elif len(x)==4:
+            return tuple(clip8(int(t,0))
+                         if isinstance(t,str) else clip8(int(t))
+                         for t in x[:4])
+    elif isinstance(x,str):
+        try:
+            return ImageColor.getrgb(x)
+        except ValueError:
+            return None
+    elif isinstance(x, RGBColor):
+        return x.ctoi()
+    else:
+        return None
+
 
 def get_pos(event_str: str):
     '''Mouse Event文字列から座標を取り出す'''

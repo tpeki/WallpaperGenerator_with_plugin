@@ -47,12 +47,17 @@
 - rgb_lerp(c1: list, c2: list, t: float )
   c1(3値tuple)とc2(3値tuple)の各値を t:(1-t)でブレンドしたtupleを返す
 
-- rgb_string((r,g,b)) 、 rgb_string([r,g,b]) もしくは rgb_string(s:str)
+- rgb_string(tuple | list) 、 rgb_string(RGBColor) もしくは rgb_string(str)
   - 色指定パラメータを'#rrggbb' の16進文字列色指定にして返す
-
-- to_rgb((r,g,b)) 、 to_rgb([r,g,b])または to_rgb(s:str)
+  - 引数のタプルの()を忘れた場合( rgb_string(r,g,b) )にも対応
+  - なお4要素の場合はアルファ付きとみなして文字列化
+  - フォーマットエラーの時はNoneを返す
+  
+- to_rgb(tuple | list) 、 to_rgb(RGBColor)または to_rgb(str)
   - 色指定パラメータをr,g,b の数値にして返す
-
+  - 4要素の場合は r,g,b,a で返却
+  - フォーマットエラーの場合は None を返す
+  
 - bg_and_font(color: str | RGBColor | tuple[int] ) -> str, str
    - 背景色を受け取り、前景テキスト色と背景色の色指定文字列を返す
 
