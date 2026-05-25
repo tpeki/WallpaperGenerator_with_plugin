@@ -412,10 +412,6 @@ def clover(p: Param, *, rotate=20, swirl=30):
     yr = -xn * s + yn * c
     xn, yn = xr, yr
 
-    # --- 極座標 ---
-    theta = np.arctan2(yn, xn)
-    radius = np.sqrt(xn**2 + yn**2)
-
     # --- 回転関数 ---
     def rotate(px, py, ang):
         c = np.cos(ang)
@@ -464,7 +460,6 @@ def whirl(p: Param, *, tight=38, thick=28, start=90):
     phi = np.arctan2(Y,X)
    
     freq = 4 + tight*0.4
-    #spiral = np.sin(phi+rad*freq)
    
     phase = (start + phi - dir*rad*freq) % (2*np.pi)
     mask = phase < thick * 0.1
@@ -566,11 +561,6 @@ def prevset(name, value, lo=None, hi=None):
     
     return retv
 
-def set_default(shape, arg, value):
-    global DF
-    DF[shape][arg] = value
-
-
 # =========================
 # グリッド生成
 # =========================
@@ -631,12 +621,8 @@ def luminance(x, y, R, shade, angle, shift):
 
     return lum.astype(np.float32)
 
-def swirl_marble(R,
-                 freq=10,
-                 swirl=6,
-                 wobble=0.25,
-                 contrast=0.22,
-                 rgb=False):
+
+def swirl_marble(R, freq=10, swirl=6, wobble=0.25, contrast=0.22):
 
     X, Y = make_uvgrid(R)
 
@@ -655,18 +641,7 @@ def swirl_marble(R,
         + contrast * np.sin(flow)
     ).astype(np.float32)
 
-    if rgb:
-
-        factor = np.dstack([
-            base * 0.92,
-            base * 1.00,
-            base * 1.08,
-        ]).astype(np.float32)
-
-        factor = np.clip(factor, 0, 1)
-
-    else:
-        factor = np.clip(base, 0, 1)
+    factor = np.clip(base, 0, 1)
 
     return factor
 
@@ -760,10 +735,9 @@ def polkadot(param: Param):
     if shape in polkadot_preserv['funcs']:
         mask, factor = FN[shape](param)
     else:
-        mask, factor = circle_dot(param)
+        mask, factor = disc(param)
     ps_y, ps_x = mask.shape
     hf_y, hf_x = ps_y//2, ps_x//2
-    is_factor_rgb = (factor is not None and factor.ndim == 3)
 
     lattice = clip(lattice, 0, len(LATTICES)-1)
     dy = v * LATRATIO[lattice][1]
@@ -837,7 +811,7 @@ def place(cx, cy, ps_x, ps_y, hf_x, hf_y, W, H,
     
     # --- 貼り付け位置（パッチ基準） ---
     y0, x0 = cy - hf_y, cx - hf_x
-    y1, x1 = y0 + ps_y, x0 + ps_x
+    #y1, x1 = y0 + ps_y, x0 + ps_x
 
     # --- クリッピング ---
     clipped = clip_box(x0, y0, ps_x, ps_y, W, H)
@@ -857,6 +831,8 @@ def place(cx, cy, ps_x, ps_y, hf_x, hf_y, W, H,
 
     if factor is not None:
         sub_factor = factor[py0:py1, px0:px1]
+        is_factor_rgb = (sub_factor.ndim == 3)
+        
         sub_patch = sub_patch * (sub_factor if is_factor_rgb
                                  else sub_factor[..., None]) 
 
@@ -880,7 +856,6 @@ def generate(p):
 
     if polkadot_preserv['shape'] is None:
         polkadot_preserv['shape'] = polkadot_preserv['funcs'][0]
-    shape = polkadot_preserv['shape']
 
     scale = clip(p.pdepth, 1, 4)
     W = p.width * scale

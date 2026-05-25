@@ -16,6 +16,7 @@ COLOR_JITTER = 40
 BGCOLOR = '#66543B'  # 煉瓦
 MCOLOR = '#DCDCDC'  #モルタル
 FUCHI = '#EDE1A8'  # 斑
+FLOWER = '#F7C7F2'
 
 ROT = 15
 
@@ -23,63 +24,62 @@ LEAFSIZE = 43
 LEAFDIST = 130
 BRICKSIZE = 71
 BRICKPROP = 2
+FLOWER_P = 0
 
 LEAF_DFL = 100
 
 ivy_preserv = {'shapes': None,
+               'flowers': None,
                'grids': None,
-               'mask': 'ivy',
+               'shape': 'ivy',
+               'flower': 'horn',
                'grid': 'hangdown',
+               'brick': True
                }
 
 # =========================
 # 形状登録デコレータ
 # =========================
 SFN = {}  # 関数名: shapes
+FFN = {}  # 関数名: flowers
 PFN = {}  # 関数名: planting patterns
 DF = {}  # パラメータ名及びデフォルト値
+COLORED = []  # 色付きshape
 
-# Shape (mask)
-def regis(func):
-    """
-    関数の引数名を抽出して FN 辞書に登録するデコレータ
-    """
-    # inspectで引数名の一覧を取得（selfなどは除外される）
-    sig = inspect.signature(func)
-    params = list(sig.parameters.values())
+def reg(kind):
+    def decorator(func):
+        """
+        関数の引数名を抽出して FN 辞書に登録するデコレータ
+        """
+        # inspectで引数名の一覧を取得（selfなどは除外される）
+        sig = inspect.signature(func)
+        params = list(sig.parameters.values())
 
-    # 2つ目まで(size, c)を除外
-    params = params[2:]
+        if kind == 's':
+            FN = SFN
+            skip = 2  # 無視する引数の数
+        elif kind == 'f':
+            FN = FFN
+            skip = 2
+        elif kind == 'g':
+            FN = PFN
+            skip = 2
+        else:
+            return func
 
-    SFN[func.__name__] = func
-    DF[func.__name__] = {
-        p.name: p.default
-        for p in params
-        if p.default is not inspect._empty and type(p.default) != bool
-    }
+        FN[func.__name__] = func
 
-    return func
+        params = params[skip:]
+        defaults = {}
+        for p in params:
+            if p.default is not inspect._empty and type(p.default) != bool:
+                defaults[p.name] = p.default
+            if p.name == 'RGB' and p.default is True:
+                COLORED.append(func.__name__)
+        DF[func.__name__] = defaults
+        return func
 
-# grid (planting)
-def regip(func):
-    """
-    関数の引数名を抽出して FN 辞書に登録するデコレータ
-    """
-    # inspectで引数名の一覧を取得（selfなどは除外される）
-    sig = inspect.signature(func)
-    params = list(sig.parameters.values())
-
-    # 2つ目まで(W,H)を除外
-    params = params[2:]
-
-    PFN[func.__name__] = func
-    DF[func.__name__] = {
-        p.name: p.default
-        for p in params
-        if p.default is not inspect._empty
-    }
-
-    return func
+    return decorator
 
 # ==========
 # wallpaper 基本
@@ -88,8 +88,10 @@ def regip(func):
 def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, 'ツタの葉   間隔=10x',
                        {'color1':'葉っぱ', 'color2':'壁',
+                        'color3':'花',
                         'color_jitter':'色ゆらぎ',
                         'sub_jitter':'揺れ角',
+                        'sub_jitter2':'花',
                         'pwidth':'粒度', 'pheight':'間隔',
                         'pdepth':'煉瓦サイズ'})
     return module_name
@@ -98,8 +100,10 @@ def intro(modlist: Modules, module_name):
 def default_param(p: Param):
     p.color1 = RGBColor(COLOR1)
     p.color2 = RGBColor(BGCOLOR)
+    p.color3 = RGBColor(FLOWER)
     p.color_jitter = COLOR_JITTER
     p.sub_jitter = ROT
+    p.sub_jitter2 = FLOWER_P
     p.pwidth = LEAFSIZE
     p.pheight = LEAFDIST
     p.pdepth = BRICKSIZE
@@ -109,11 +113,12 @@ def default_param(p: Param):
 def sg_modline(func, ftype):
     # ☑func    param[  ] ...
     # type(param) == bool の場合は無視
-    if not ftype in ['sfn', 'pfn']:
-        return None
+    cur = [ivy_preserv['shape'],
+           ivy_preserv['flower'],
+           ivy_preserv['grid']
+           ]
     line = [sg.Radio('', key=f'-{ftype}_{func}-', group_id=ftype,
-                     default=True if ivy_preserv['mask'] == func
-                     or ivy_preserv['grid'] == func else False),
+                     default=True if func in cur else False),
             sg.Text(func, size=(12,0))]
 
     dflt = DF[func]
@@ -126,15 +131,19 @@ def sg_modline(func, ftype):
             continue
         elif type(v) == int:
             line.append(sg.Text(f'{par}[i]'))
+            isint = True
         elif type(v) == float:
             line.append(sg.Text(f'{par}[f]'))
+            isint = False
         else:
             continue
 
         if par in ivy_preserv['arglists'][func].keys():
             v = ivy_preserv['arglists'][func][par]
+            if isint:
+                v = int(v)
             
-        line.append(sg.Input(f'{v}', key=f'-{func}_{par}-',width=4))
+        line.append(sg.Input(f'{v}', key=f'-{func}_{par}-',width=5))
 
     #print(func, dflt, line )
     return line
@@ -167,23 +176,34 @@ def desc(p: Param):
             continue
         slo.append(line)
         
-    plo = []
-    for fn in ivy_preserv['grids']:
-        line = sg_modline(fn, 'pfn')
+    flo = []
+    for fn in ivy_preserv['flowers']:
+        line = sg_modline(fn, 'ffn')
         if line is None:
             continue
-        plo.append(line)
+        flo.append(line)
+        
+    glo = []
+    for fn in ivy_preserv['grids']:
+        line = sg_modline(fn, 'gfn')
+        if line is None:
+            continue
+        glo.append(line)
         
     lo = [[sg.Frame('Shapes', layout=slo, relief='ridge', expand_x=True)],
-          [sg.Frame('Grids', layout=plo, relief='ridge', expand_x=True)],
-          [sg.Text(expand_x=True),
+          [sg.Frame('Flowers', layout=flo, relief='ridge', expand_x=True)],
+          [sg.Frame('Grids', layout=glo, relief='ridge', expand_x=True)],
+          [sg.Checkbox('Brick', default=ivy_preserv['brick'], key='-brick-'),
+           sg.Text(expand_x=True),
            sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
            sg.Button('Apply', key='-ok-', background_color='#ddffdd'),
            ],
           ]
           
-    curshape = ivy_preserv['mask']
-    curgrid = ivy_preserv['grid']
+    current = [['sfn', 'shape', ivy_preserv['shape']],
+               ['ffn', 'flower', ivy_preserv['flower']],
+               ['gfn', 'grid', ivy_preserv['grid']]
+               ]
 
     wn = sg.Window('mod_ivy config', layout=lo)
 
@@ -201,17 +221,20 @@ def desc(p: Param):
         if not '_' in x:
             continue
         fn, pn = split_guikey(x)
-        if fn in ivy_preserv['shapes']+ivy_preserv['grids']:
+        if fn in (ivy_preserv['shapes']
+                  +ivy_preserv['flowers']
+                  +ivy_preserv['grids']):
             if pn in ivy_preserv['arglists'][fn]:
                 ivy_preserv['arglists'][fn][pn] = float(va[x])
     wn.close()
     
     if change:
         #print(va)
-        fn, pr = split_guikey(firstitem(va['sfn']))
-        ivy_preserv['mask'] = pr if pr is not None else curshape
-        fn, pr = split_guikey(firstitem(va['pfn']))
-        ivy_preserv['grid'] = pr if pr is not None else curgrid
+        for ent,lbl,cur in current:
+            fn, pr = split_guikey(firstitem(va[ent]))
+            ivy_preserv[lbl] = pr if pr is not None else cur
+
+        ivy_preserv['brick'] = va['-brick-'] == True
             
         #print(ivy_preserv)
         return generate(p)
@@ -224,20 +247,27 @@ def desc(p: Param):
 # =========================
 def prevset(flag, name, value, lo=None, hi=None):
     if flag == 's':
-        func = ivy_preserv['mask']
-    else:
+        func = ivy_preserv['shape']
+    elif flag == 'f':
+        func = ivy_preserv['flower']
+    elif flag == 'g':
         func = ivy_preserv['grid']
+    else:
+        return 0 if lo is None else lo
         
-    retv = (
-        ivy_preserv['arglists']
-        .get(func,{})
-        .get(name, value)
-        )
-    
+    argdict = ivy_preserv['arglists'].get(func,{})
+    retv = argdict.get(name, value)
+
     if lo is not None:
         retv = max(lo, retv)
     if hi is not None:
         retv = min(retv, hi)
+
+    t = DF[func].get(name, None)
+    if isinstance(t, int):
+        retv = int(retv)
+
+    argdict[name] = retv
     
     return retv
 
@@ -273,7 +303,7 @@ def leaf(size, c=COLOR1):
     return leaf
     
 
-def fuiri(size, c=COLOR1):
+def fuiri(size, c=COLOR1, srate=0.8):
     r,g,b = to_rgb(c)
     vein = to_rgb([r*1.3, g*1.3, b*1.3])
 
@@ -284,7 +314,7 @@ def fuiri(size, c=COLOR1):
 
     base = Image.new('RGBA', (size, size), (0,0,0,0))
     leafimg = leafmask(size, c)
-    shrink = int(size*0.9)
+    shrink = int(size*srate)
     leafshrink = leafimg.resize((shrink,shrink),resample=Image.BICUBIC)
     dr = ImageDraw.Draw(leafshrink)
     dr.line((shrink-1,0,0,shrink-1),width=2,fill=vein)
@@ -304,12 +334,12 @@ def fuiri(size, c=COLOR1):
 # ==========
 
 # 笹の葉
-@regis
-def sasa(size, c=COLOR1, slant=5, child=0.9, fu=False):
+@reg('s')
+def sasa(size, c=COLOR1, slant=5, child=90, RGB=False):
     slant = prevset('s', 'slant', slant)
-    child = prevset('s', 'child', child, 0.1, 1.0)
+    child = prevset('s', 'child', child, 1, 100)/100.0
     
-    if fu:
+    if RGB:
         c = rated_jitter(RGBColor(c), 40)
         leaf_s = fuiri(size, c)
     else:
@@ -340,16 +370,16 @@ def sasa(size, c=COLOR1, slant=5, child=0.9, fu=False):
     return base
 
 # 笹の葉 斑入り
-@regis
-def sasa2(size, c=COLOR1, slant=5, child=0.9):
+@reg('s')
+def sasa2(size, c=COLOR1, slant=5, child=90, RGB=True):
     slant = prevset('s', 'slant', slant)
-    child = prevset('s', 'child', child, 0.1, 1.0)
+    child = prevset('s', 'child', child, 1, 100)
     
-    return sasa(size, c, slant, child, fu=True)
+    return sasa(size, c, slant, child, RGB=True)
 
 
 # 蔦の葉
-@regis
+@reg('s')
 def ivy(size, c=COLOR1):
     leaf_s = leafmask(size)
 
@@ -392,10 +422,10 @@ def ivy(size, c=COLOR1):
 
 
 # つつじっぽい
-@regis
-def azarea(size, c=COLOR1, division=6, number=5, density=1.6):
-    n = int(prevset('s', 'division', division, 3, 20))
-    number = int(prevset('s', 'number', number, 1, division))
+@reg('s')
+def azarea(size, c=COLOR1, div=6, number=5, density=1.6):
+    n = prevset('s', 'div', div, 3, 20)
+    number = prevset('s', 'number', number, 1, div)
     d = prevset('s', 'density', density, 0.5, 3.0)
 
     leaf_s = leafmask(size)
@@ -414,6 +444,94 @@ def azarea(size, c=COLOR1, division=6, number=5, density=1.6):
     base = base.resize((size,size),resample=Image.LANCZOS)
     return base
     
+
+# モチノキ クロオガネモチ、カナメモチ
+@reg('s')
+def holly(size, c=COLOR1, cluster=3):
+    cluster = prevset('s', 'cluster', cluster, 1, 5)
+
+    leaf = leafmask(size)
+    shk = size//int((cluster+2)/3+1)
+    leaf = leaf.rotate(45, expand=True)
+    leaf = leaf.resize((shk,shk),resample=Image.NEAREST)
+    left = leaf.rotate(-30, resample=Image.BICUBIC, expand=True)
+    left = left.crop(left.getbbox())
+    right = ImageOps.mirror(left)
+    lx,ly = left.size
+        
+    base = Image.new('RGBA',(size,size*2),(0,0,0,0))
+    xc = size // 2
+    #dr = ImageDraw.Draw(base)
+    
+    for x in range(cluster):
+        r = right if x%2 else left
+        posx = xc if (x%2) else xc-lx
+        posy = int((x / cluster) * (size / 2))
+        base.paste(r,(posx,posy),r)
+        #dr.rectangle((posx,posy,posx+lx,posy+ly),outline='#3333ff',width=2)
+
+    base = base.crop(base.getbbox())
+    r = size/base.width
+    base = base.resize((size, int(base.height*r)), resample=Image.LANCZOS)
+    
+    return base
+    
+# 朝顔
+@reg('s')
+def asagao(size, c=COLOR1, cluster=2):
+    cluster = prevset('s', 'cluster', cluster, 1, 10)
+    
+    leaf_s = leafmask(size)
+    leaf_s = leaf_s.rotate(45,resample=Image.NEAREST,expand=True)
+    sx,sy = leaf_s.size
+
+    leaf_s = leaf_s.resize((int(leaf_s.width*0.75),leaf_s.height),
+                           resample=Image.NEAREST)
+    sx,sy = leaf_s.size
+    cut = sy/3
+
+    subleaf = leaf_s.resize((int(sx//1.8),int(sy//2.3)), resample=Image.NEAREST)
+    subleaf = subleaf.rotate(-55,resample=Image.NEAREST,expand=True)
+    subleaf = subleaf.crop(subleaf.getbbox())
+    ssx,ssy = subleaf.size
+
+    base = Image.new('RGBA',(sx*3,sy*2),(0,0,0,0))
+    bx,by = base.size
+
+    dx = int(bx/2-ssx*0.9)
+    dy = int(ssy/2)
+    base.paste(subleaf, (dx,dy), subleaf)
+    right = ImageOps.mirror(subleaf)
+    rx = int(bx/2-ssx*0.1)
+    base.paste(right, (rx,dy), right)
+    base.paste(leaf_s,((bx-sx)//2,0),leaf_s)
+    
+    dr = ImageDraw.Draw(base)
+    dr.rectangle((0,0,bx,dy), fill=(255,0,0,0))
+    dr.ellipse((int(bx*0.46),0,int(bx*0.54),int(dy*1.3)),fill=(0,0,0,0))
+
+    base = base.crop(base.getbbox())
+    base = base.rotate(-35, resample=Image.BICUBIC, expand=True)
+
+    #base.show()
+    bx,by = base.size
+    b2 = [base.copy(), ImageOps.mirror(base)]
+
+    clus = Image.new('RGBA', (int(bx*2)+1,int(by*(cluster+1))+1), (0,0,0,0))
+    dr = ImageDraw.Draw(clus)
+    for i in range(cluster):
+        dx = int(bx * (i%2) / 2)
+        dy = int(by * i / 2)
+        
+        clus.paste(b2[i%2],(dx,dy),b2[i%2])
+
+    clus = clus.crop(clus.getbbox())
+    r = size/max(clus.width, clus.height)
+    clus = clus.resize((int(clus.width*r),int(clus.height*r)),
+                       resample=Image.LANCZOS)
+
+    return clus
+
 
 # ===========
 # 葉っぱ描画支援
@@ -435,12 +553,207 @@ def dlt(delta):
     return random.randint(-delta,delta)
 
 
+# ===========
+# 花マスク(色付き)
+# ===========
+@reg('f')
+def horn(size, c=FLOWER):
+    blossom = Image.new('RGBA',(size, size),(0,0,0,0))
+    dr = ImageDraw.Draw(blossom)
+
+    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+    
+    dr.polygon((size//5, size//4, size//2,size, size*4//5, size//4),
+               fill=bcol)
+    dr.ellipse((0,0,size-1,size//2), fill=bcol)     
+
+    blossom = blossom.rotate(180+dlt(60), resample=Image.BILINEAR, expand=True)
+    blossom = blossom.crop(blossom.getbbox())
+    r = size/max(blossom.width, blossom.height)
+    blossom = blossom.resize((int(blossom.width*r),int(blossom.height*r)),
+                             resample=Image.LANCZOS)
+
+    return blossom
+
+@reg('f')
+def roundpetal(size, c=FLOWER, petals=5, floret=10):
+    size = int(size*0.7) 
+    blossom = Image.new('RGBA',(size, size),(0,0,0,0))
+    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+    n = prevset('f', 'petals', petals, 3, 6)
+    floret = prevset('f', 'floret', floret, 25, 50)
+    
+    petal = Image.new('RGBA',(size, size),(0,0,0,0))
+    dr = ImageDraw.Draw(petal)
+    psize = int(size/2.5)
+    dr.ellipse(((size-psize)//2,0,(size-psize)//2+psize, psize),
+               fill=bcol)
+
+    angle = 360 // n
+    for n in range(n):
+        p = petal.rotate(n*angle, expand=False)
+        blossom.paste(p,(0,0),p)
+
+    return drawfloret(blossom, floret)
+
+
+def drawfloret(img, floret):
+    sr = int(img.width*floret/100)
+
+    fimg = Image.new('L',(sr,sr), 0)
+    dr = ImageDraw.Draw(fimg)
+    dr.ellipse((0,0,sr,sr), fill=255)
+
+    scol = rated_jitter(RGBColor(240, 240, 64),20)
+    dark = brightness(scol, s=1.6)
+    rgb = rad_grad(sr, sr, dark, scol, rmed=0.8)
+
+    w, h = img.size
+    img.paste(rgb,((w-sr)//2,(h-sr)//2,(w+sr)//2,(h+sr)//2), fimg)
+
+    return img
+    
+
+@reg('f')
+def daisy(size, c=FLOWER, petals=14, gradation=0, floret=20):
+    size = int(size*0.9) 
+    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+    n = int(prevset('f', 'petals', petals, lo=3))
+    gradation = int(prevset('f', 'gradation', gradation, -1, 1))
+    floret = int(prevset('f', 'floret', floret, 10, 50))
+    
+    r = np.pi*size/(3.4*n)  # 花弁先端の円弧半径 (2πr/n)/2 = 2*π*size/2/n/2
+    xc = size // 2
+    x0,y0 = xc,xc
+    x1, y1 = int(xc - r), int(r)
+    x2, y2 = int(xc + r), y1
+
+    pt = Image.new('L',(size,size),0)
+    dr = ImageDraw.Draw(pt)
+    dr.pieslice((x1,0,x2,r*2),start=180,end=0,fill=255)
+    dr.polygon((x0,y0,x1,y1,x2,y2),fill=255)
+
+    mask = Image.new('L',(size,size),0)
+    for i in range(n):
+        q = pt.rotate(i*360/n, expand=False)
+        mask.paste(q,(0,0),q)
+
+    W,H = mask.size
+    if gradation != 0:
+        brigt = brightness(RGBColor(bcol),f=1.5)
+    else:
+        brigt = bcol
+    if gradation < 0:
+        rgb = rad_grad(W, H, bcol, brigt, rmed=0.3, power2=2.0)
+    else:
+        rgb = rad_grad(W, H, brigt, bcol)
+
+    base = Image.new('RGBA', (W,H), (0,0,0,0))
+    base.paste(rgb, (0,0), mask)
+
+    return drawfloret(base, floret)    
+
+
+@reg('f')
+def pointedpetal(size, c=FLOWER, petals=5, weight=1.7, stimen=2):
+    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+    n = prevset('f', 'petals', petals, lo=3)
+    weight = prevset('f', 'weight', weight, 1E-6, 2.0)
+    stimen = prevset('f', 'stimen', stimen, 2, 5)
+    
+    # マスク作成
+    cx = size//2
+    R = size * 0.45
+    r = R * (np.cos(2*np.pi/n) / np.cos(np.pi/n)) * weight
+    
+    outer = np.linspace(0, 2*np.pi, n, endpoint=False)
+    inner = outer + np.pi / n
+
+    angles = np.empty(2*n)
+    angles[0::2] = outer
+    angles[1::2] = inner
+    radii  = np.array([R, r] * n)
+    xs = cx + radii * np.cos(angles)
+    ys = cx + radii * np.sin(angles)
+
+    P = np.stack([xs, ys], axis=1)
+    A = P
+    B = np.roll(P, -1, axis=0)
+
+    X, Y = np.meshgrid(np.arange(size), np.arange(size))
+    X = X[..., None]  # (H,W,1)
+    Y = Y[..., None]
+   
+    # XOR で内外判定
+    cond1 = ((A[:,1] > Y) != (B[:,1] > Y))  # 条件1 辺がYを跨ぐか(偶奇ルール)
+    xints = (B[:,0] - A[:,0]) * \
+            (Y - A[:,1]) / (B[:,1] - A[:,1] + 1e-12) + A[:,0]  # 交点
+    cond2 = X < xints  # 条件2 交点が左側にあるか
+    mask = np.logical_xor.reduce(cond1 & cond2, axis=2)
+
+    mask = Image.fromarray(mask.astype(np.uint8)*255, 'L')
+    W,H = mask.size
+    dark = brightness(RGBColor(bcol),f=0.6)
+    rgb = rad_grad(W, H, dark, bcol, rmed=0.4)
+
+    base = Image.new('RGBA', (W,H), (0,0,0,0))
+    base.paste(rgb, (0,0), mask)
+
+    st = Image.new('RGBA',base.size,(0,0,0,0))
+    drw = ImageDraw.Draw(st)
+    cx = base.width//2
+    l = int(cx * 0.40)
+    darker = brightness(RGBColor(bcol),f=0.3).ctoi()
+    drw.arc((cx-l,cx,cx+l,cx+2*l), start=200, end=270,
+           fill=darker, width=2)
+    for i in range(stimen):
+        ss = st.rotate((i-stimen//2)*10)
+        base.paste(ss,(i*2,i*2),ss)
+    
+    return base
+
+# 葉(色違い)
+@reg('f')
+def leaves(size, c=FLOWER, cluster=3):
+    cluster = prevset('s', 'cluster', cluster, 1, 3)
+    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+
+    leaf = leafmask(size)
+    leaf = leaf.convert('L').point(lambda v: 255 if v > 0 else 0)
+    shk = size//int((cluster+2)/3+1)
+    leaf = leaf.rotate(45, expand=True)
+    leaf = leaf.resize((shk,shk),resample=Image.NEAREST)
+    leaf = leaf.crop(leaf.getbbox())
+    
+    base = Image.new('L',(size,size),0)
+    xc = size//2
+    
+    for i in range(cluster):
+        # 0 = 0, 1 = -30 , 2=+30  0,-1,1 
+        angle = -(i%2)*60 + 30 if i>0 else 0
+        lt = leaf.rotate(angle, resample=Image.BICUBIC, expand=True)
+        lt = lt.crop(lt.getbbox())
+        dx = lt.width * (i%2) if i>0 else lt.width//2
+        dy = (cluster-i-1)*lt.height//8
+        base.paste(lt,(xc-dx,dy),lt)
+
+    base = base.crop(base.getbbox())
+    h = int(base.height*size/base.width)
+    base = base.resize((size, h), resample=Image.LANCZOS)
+
+    colr = gradation(size, h, bcol)
+    img = Image.new('RGBA',(size, h),(0,0,0,0))
+    img.paste(colr, (0,0), base)
+
+    return img
+    
+
 # ==========
 # 葉っぱ配置グリッド
 # ==========
-@regip
-def pileup(W, H, *, offset=0.2):
-    offset = prevset('p', 'offset', offset, 0.0, 1.0)
+@reg('g')
+def pileup(W, H, *, offset=40):
+    offset = prevset('g', 'offset', offset, 0, 100)/100.0
     grid = np.zeros((H, W), dtype=bool)
 
     leastw = int(W * offset)
@@ -457,11 +770,11 @@ def pileup(W, H, *, offset=0.2):
     return grid
 
 
-@regip
-def hangdown(W, H, *, xp=0.86, offset=0.13, alpha=80):
-    xp = prevset('p', 'xp', xp, 0.0, 1.0)
-    offset = prevset('p', 'offset', offset, 0.0, 1.0)
-    alpha = prevset('p', 'alpha', alpha, 1, W)
+@reg('g')
+def hangdown(W, H, *, xp=88, offset=63, alpha=110):
+    xp = prevset('g', 'xp', xp, 0, 100)/100.0
+    offset = prevset('g', 'offset', offset, 0, 100)/100.0
+    alpha = prevset('g', 'alpha', alpha, 1, W)
     
     p=1.5
     xp = int(W * xp)
@@ -482,6 +795,42 @@ def hangdown(W, H, *, xp=0.86, offset=0.13, alpha=80):
     return grid
 
 
+@reg('g')
+def arch(W, H, *, xp=82, radius=30, width=40):
+    """xp: 中心位置、radius: 上部の短径、width: ゲート幅＝長径"""
+    xp = prevset('g', 'xp', xp, 0, 100)/100.0
+    radius = prevset('g', 'radius', radius, 0, 100)/100.0
+    width = prevset('g', 'width', width, 1, W)/100.0
+
+    # 中心 x 座標
+    xc = int(W * xp)
+    sr = int(H * radius)
+    lr = int(W * width)//2
+
+    # 全体 True
+    grid = np.ones((H, W), dtype=bool)
+
+    # 座標
+    xs = np.arange(W)[None, :]      # shape (1, W)
+    ys = np.arange(H)[:, None]      # shape (H, 1)
+
+    # 半楕円の中心 y（上に配置したいので b を上に取る）
+    yc = sr
+
+    # --- 半楕円領域 ---
+    # ((x-xc)/a)^2 + ((y-yc)/b)^2 <= 1 かつ y <= yc
+    ellipse = ((xs - xc) / lr)**2 + ((ys - yc) / sr)**2 <= 1
+    ellipse &= (ys <= yc)
+
+    # --- 下の長方形領域 ---
+    rect = (ys > yc) & ((xc- lr) < xs) & (xs < (xc+ lr))
+
+    # False を埋める
+    grid[ellipse | rect] = False
+
+    return grid
+
+
 # ==========
 # 葉っぱで覆う
 # ==========
@@ -498,19 +847,23 @@ def covering(p: Param, T=5):
     lsize = p.pwidth
     step = lsize//2
     color = p.color1
+    flower = p.color3
     J = p.color_jitter
     S = p.sub_jitter
     D = p.pheight / 100
+    flw = min(p.sub_jitter2,100)
 
-    mask_name = ivy_preserv['mask']
+    mask_name = ivy_preserv['shape']
+    flower_name = ivy_preserv['flower']
     grid_name = ivy_preserv['grid']
   
     W,H = ow+step*4, oh+step*4
     img = Image.new('RGBA', (W,H), (0,0,0,0))
 
     lmask = SFN[mask_name](lsize*2, color.ctoi())
+    fmask = FFN[flower_name](lsize, flower.ctoi())
     
-    if mask_name in ['sasa2']:  # colored masks
+    if mask_name in COLORED:  # colored masks
         RGB = True
         mask = lmask
     else:
@@ -528,14 +881,19 @@ def covering(p: Param, T=5):
             if grid[y,x] == False:
                 continue
 
-            emask = mask.rotate(dlt(S), resample=Image.NEAREST, expand=True)
-            if RGB:
+            if random.randint(0,100) < flw:
+                emask = fmask.rotate(dlt(S), resample=Image.BICUBIC,
+                                     expand=True)
                 line.paste(emask,(x+dlt(T), dlt(T)),emask)
             else:
-                c = rated_jitter(color, J).ctoi()
-                colr = gradation(*emask.size, c)
-
-                line.paste(colr,(x+dlt(T), dlt(T)),emask)
+                emask = mask.rotate(dlt(S), resample=Image.NEAREST,
+                                    expand=True)
+                if RGB:
+                    line.paste(emask,(x+dlt(T), dlt(T)),emask)
+                else:
+                    c = rated_jitter(color, J).ctoi()
+                    colr = gradation(*emask.size, c)
+                    line.paste(colr,(x+dlt(T), dlt(T)),emask)
 
         img.paste(line, (step//2,y-step//2), line)
     return img.crop((step,step,ow+step,oh+step))
@@ -563,6 +921,40 @@ def gradation(w, h, color, darken=0.5):
 
     return Image.fromarray(rgba, mode='RGBA')
 
+
+def rad_grad(w, h, color1, color2, center=None,
+             inner=0.0, outer=1.0, power=1.0, rmed=0.5, power2=None):
+    color1 = to_rgb(color1)
+    color2 = to_rgb(color2)
+    if power2 is None:
+        power2 = power
+    
+    if center is None:
+        center = (w//2, h//2)
+    cx,cy = center
+    
+    xs = np.arange(w)[None,:]
+    ys = np.arange(h)[:,None]
+    dx,dy = xs-cx, ys-cy
+    dist = np.sqrt(dx*dx+dy*dy)
+    maxd = np.sqrt((max(cx, w-cx))**2 + (max(cy, h-cy))**2)
+
+    x = np.clip(dist/maxd, 0, 1)
+    r2 = np.clip(rmed, 1e-6, 1-1e-6)
+    t = np.empty_like(x)
+
+    mask = x < r2
+    t[mask] = ((x[mask]/r2)**power) * r2
+    t[~mask] = r2 + (((x[~mask]-r2)/(1-r2))**power2) * (1-r2)
+
+    g = inner + (outer - inner) * t
+    g = g[..., None]
+
+    c1 = np.array(color1, dtype=np.float32)
+    c2 = np.array(color2, dtype=np.float32)
+    rgb = (c1 * (1 - g) + c2 * g).astype(np.uint8)
+
+    return Image.fromarray(rgb, 'RGB')
 
 # ==========
 # レンガ塀
@@ -611,14 +1003,17 @@ def brick(W, H, bcolor, mcolor, brick, proportion=2, mortar=0.05):
 def generate(p: Param):
     if ivy_preserv['shapes'] is None:
         ivy_preserv['shapes'] = list(SFN.keys())
+        ivy_preserv['flowers'] = list(FFN.keys())
         ivy_preserv['grids'] = list(PFN.keys())
         arglists = {}
-        for k in ivy_preserv['shapes']+ivy_preserv['grids']:
+        for k in (ivy_preserv['shapes']
+                  +ivy_preserv['flowers']
+                  +ivy_preserv['grids']):
             arglists[k] = DF[k].copy()
         ivy_preserv['arglists'] = arglists
 
-    if ivy_preserv['mask'] is None:
-        ivy_preserv['mask'] = ivy_preserv['shapes'][0]
+    if ivy_preserv['shape'] is None:
+        ivy_preserv['shape'] = ivy_preserv['shapes'][0]
 
     if ivy_preserv['grid'] is None:
         ivy_preserv['grid'] = ivy_preserv['grids'][0]
@@ -627,11 +1022,14 @@ def generate(p: Param):
     
     if p.h_img is not None:
         bg = p.bg().convert('RGBA')
-    else:
+    elif ivy_preserv['brick']:
         bcolor = p.color2
         mcolor = MCOLOR
         bsize = p.pdepth
         bg = brick(W, H, bcolor, mcolor, bsize)
+    else:
+        bcolor = rgb_random_jitter(p.color2, p.color_jitter)
+        bg = Image.new('RGBA',(W,H),bcolor.ctoi())
     
     fg = covering(p)
     bg.paste(fg,(0,0),fg)
