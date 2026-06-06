@@ -810,7 +810,7 @@ def cordata(size, c=FLOWER, spike=65):
     base = Image.new('RGBA',(size,size),(0,0,0,0))
 
     # bract(苞)
-    bract = daisy(size, c=c, petals=4, gradation=1, floret=10)
+    bract = daisy(size, c=c, petals=4, gradation=120, floret=10)
     bract = bract.crop(bract.getbbox())
     bw,bh = bract.size
     bc = size-bw//2
@@ -986,11 +986,13 @@ def hangdown(W, H, *, xp=88, offset=63, alpha=110, reach=1.25):
 
 
 @reg('g')
-def arch(W, H, *, xp=82, radius=30, width=40):
+def arch(W, H, *, xp=82, radius=30, exp=220, width=40, jitter=100):
     """xp: 中心位置、radius: 上部の短径、width: ゲート幅＝長径"""
     xp = prevset('g', 'xp', xp, 0, 100)/100.0
     radius = prevset('g', 'radius', radius, 0, 100)/100.0
+    exp = prevset('g', 'exp', exp, 0, 1000)/100.0
     width = prevset('g', 'width', width, 1, W)/100.0
+    jitter = prevset('g', 'jitter', jitter, lo=0)
 
     # 中心 x 座標
     xc = int(W * xp)
@@ -1008,12 +1010,23 @@ def arch(W, H, *, xp=82, radius=30, width=40):
     yc = sr
 
     # --- 半楕円領域 ---
-    # ((x-xc)/a)^2 + ((y-yc)/b)^2 <= 1 かつ y <= yc
-    ellipse = ((xs - xc) / lr)**2 + ((ys - yc) / sr)**2 <= 1
+    ellipse = np.abs((xs - xc) / lr)**exp + np.abs((ys - yc) / sr)**exp <= 1
     ellipse &= (ys <= yc)
 
     # --- 下の長方形領域 ---
-    rect = (ys > yc) & ((xc- lr) < xs) & (xs < (xc+ lr))
+    left = xc - lr
+    right = xc + lr
+    left_w = wobble(H, jitter=jitter)
+    right_w = wobble(H, jitter=jitter)
+    left_y = np.clip(np.rint(left + left_w - jitter / 2).astype(int),
+                     0, W - 1)
+    right_y = np.clip(np.rint(right + right_w - jitter / 2).astype(int),
+                      0, W - 1)
+
+    rect = ((ys > yc) &
+            (xs >= left_y[:, None]) & (xs <= right_y[:, None])
+            )
+    # (ys > yc) & ((xc- lr) < xs) & (xs < (xc+ lr))
 
     # False を埋める
     grid[ellipse | rect] = False

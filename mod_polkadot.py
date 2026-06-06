@@ -214,10 +214,11 @@ def desc(p: Param):
 #  色要素は _dot() では持たず、polkadot() の方で付与する
 
 # =========================
-# 円パッチ
+# 円パッチ exp=100:diamond, 200:circle, 260:squarcle, 900:square
 # =========================
 @regi
-def disc(p: Param, *, shade=0, angle=215, shift=40):
+def disc(p: Param, *, exp=200, shade=0, angle=215, shift=40):
+    exp = prevset('exp', exp, lo=1, hi=1000)/100.0
     shade = prevset('shade', shade, lo=0, hi=100)
     angle = prevset('angle', angle)
     shift = prevset('shift', shift) / 100.0
@@ -226,7 +227,10 @@ def disc(p: Param, *, shade=0, angle=215, shift=40):
     x, y = make_ogrid(R)
 
     # 円マスク（高解像度）
-    dist_center = np.sqrt(x**2 + y**2)
+    if exp == 2.0:
+        dist_center = np.sqrt(x**2 + y**2)
+    else:
+        dist_center = (np.abs(x)**exp + np.abs(y)**exp)**(1/exp)
     mask = (dist_center <= R).astype(np.float32)
 
     lum = luminance(x, y, R, shade, angle, shift)
