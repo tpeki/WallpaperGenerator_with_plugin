@@ -24,6 +24,7 @@ import threading
 import queue
 from wall_common import *
 from filedialog import *
+import winwall
 
 DEFAULT_MODULE = 'stripe'
 IMAGE_WIDTH = 1920
@@ -189,9 +190,18 @@ def layout(modlist, efxlist):
                              sg.Input('0', key='-pdepth-1',
                                     enable_events=True, size=(3,1))],
                             ]
+    if winwall.is_windows():
+        setwp = [sg.Checkbox('tile', default=False, key='-wptl-'),
+                 sg.Button('SetWP', key='-setwp-',
+                           background_color='#ee99dd')
+                 ]
+    else:
+        setwp = (None)
     file_and_button_column = [[sg.Text('File Name:', text_color='#0022ff'),
                                sg.Text('', expand_x=True, key='-fname-')],
-                              [sg.Text('')],
+                              [sg.Text('', expand_x=True),
+                               *setwp,
+                               ],
                               [sg.Text('', expand_x=True),
                                sg.Button('Redo', key='-redo-',
                                          background_color='#ffffdd'),
@@ -487,6 +497,15 @@ def gui_main(modlist: Modules, mods, param: Param,
             else:
                 print("DON'T CLOSE DIALOGUE")
             continue
+        elif ev == '-setwp-':
+            if va['-wptl-']:  # タイリングするか
+                tiled = True
+                stretch = winwall.CENTER
+            else:             # そうでないか
+                tiled =False
+                stretch = winwall.OVERSCAN
+            winwall.set_wallpaper(image, stretch, tiled=tiled)
+            continue
         elif ev in modlist.modules:
             modname = ev
             set_module(wn, modlist, modname)
@@ -635,6 +654,8 @@ def args_set(parser):
     parser.add_argument('--plugin_dir', help='プラグインフォルダ')
     parser.add_argument('--list_modules',action='store_true',
                        help='モジュールリスト表示')
+    parser.add_argument('--setwall', action='store_true',
+                        help='(Windows) 壁紙を設定')
     parser.add_argument('--module', help='モジュールを起動 random可')
     parser.add_argument('--width', type=int, help='生成画像幅')
     parser.add_argument('--height', type=int, help='生成画像高')
@@ -660,7 +681,10 @@ if __name__ == '__main__':
         helptext = parser.format_help()
         sg.popup(helptext, title='WallPaper Generator')
         exit()
-    args = parser.parse_args()    
+    args = parser.parse_args()
+
+    if winwall.is_windows():
+        winwall.cache_cleanup()
     
     modlist = Modules()
     mods = search_modules(modlist, args.plugin_dir)
@@ -690,7 +714,10 @@ if __name__ == '__main__':
         
         img = batch_generate(mods, pattern, args, param)
         print(f'Generated {pattern}')
-        if len(args.files) > 0:
+
+        if args.setwall and winwall.is_windows():
+            winwall.set_wallpaper(img, winwall.OVERSCAN)
+        elif len(args.files) > 0:
             f = pa.splitext(args.files[0])[0]+'.png'
             img.save(f)
             print(f'Image saved in {f}')

@@ -243,3 +243,43 @@
 - read_filez(filepath: str, add_zip=None)
   - filepath のファイルを一括読み込み (戻り値はsplitlines/SJISされたバッファ)
   - filepath -> dir、name として、dir/add_zip、 ,\\add_zip も検索する 
+
+
+
+## ■ winwall.py
+
+-  Windows用壁紙変更ライブラリ。windows環境に特化した処理を記載。
+
+-  is_windows()
+  - Windows環境であれば True を返す
+
+-  set_wallpaper(img, stretch, tiled=False, resize=None)
+  - imgを壁紙に設定する。
+  - tiledでない場合、imgは接続されたディスプレイの最大幅に合わせてリサイズされる。
+  - stretch: OVERSCAN (10) =アスペクト維持で拡大(余剰分カット)
+    - MAXIMIZE (6) = アスペクト維持で拡大(余白は背景色)
+    - STRETCH (2) = アスペクト無視で引き伸ばす
+    - CENTER (0) = 等倍 (画面中央配置)
+  - tiled: Trueならimgを敷き詰める
+  - resize: Tiled時に画像サイズを resize=(w,h) にリサイズする
+
+-  get_screens()
+  - 接続されている画面の大きさのリストmonitor_info []を返す
+  - monitor_infoの要素は以下のdict
+    - "handle": hMonitor
+    - "width": width
+    - "height": height
+    -  "rect": (rect.left, rect.top, rect.right, rect.bottom),
+
+-  cache_cleanup()
+
+   -  壁紙用キャッシュファイルを削除する。起動時に1回呼ぶこと
+
+   -  ```
+      if winwall.is_windows():
+      	winwall.cache_cleanup()
+      ```
+
+      
+
+
