@@ -740,7 +740,7 @@ def roundpetal(size, c=FLOWER, petals=5, gradation=100, floret=10):
     W,H = mask.size
 
     dr = ImageDraw.Draw(mask)
-    cx,cy,r = W//2, H//2, (W*0.2)//2
+    cx,cy,r = W//2, H//2, psize//2
     dr.ellipse((cx-r,cy-r,cx+r,cy+r), fill=255)
 
     if gradation != 0:
