@@ -45,7 +45,8 @@ RECOMMEND = [['all', None, None],
              ['tsutsuji', ['azarea'], ['pointedpetal', 'roundpetal']],
              ['asagao', ['asagao'], ['horn']],
              ['kanamemochi', ['holly'], ['leaves', 'roundpetal']],
-             ['dokudami', ['fishmint'], ['cordata']],
+             ['dokudami', ['heart'], ['fishmint']],
+             ['oshiroibana', ['heart'], ['roundpetal', 'pointedpetal']],
              ['kinshibai', ['branch'], ['roundpetal']],
              ]
 
@@ -269,7 +270,7 @@ def desc_(p: Param, slo, flo, glo, rec):
                ['gfn', 'grid', ivy_preserv['grid']]
                ]
 
-    wn = sg.Window('mod_ivy config', layout=lo, grab_anywhere=True)
+    wn = sg.Window('mod_ivy config', layout=lo)
 
     while True:
         ev, va = wn.read()
@@ -605,8 +606,10 @@ def asagao(size, c=COLOR1, cluster=2):
 
 
 @reg('s')
-def fishmint(size, c=COLOR1):
+def heart(size, c=COLOR1, proportion=1.0):
     """どくだみ"""
+    proportion = prevset('s', 'proportion', proportion, 0.5, 3.0)
+
     S = int(size * 1.1)
     color = to_rgb(c)
     
@@ -624,7 +627,11 @@ def fishmint(size, c=COLOR1):
     
     rgb = (mask[...,None] * color).astype(np.uint8)
     alpha = (mask * 255).astype(np.uint8)
-    return Image.fromarray(np.dstack([rgb, alpha]), 'RGBA')
+    leaf = Image.fromarray(np.dstack([rgb, alpha]), 'RGBA')
+    if proportion != 1.0:
+        leaf = leaf.resize((leaf.width, int(leaf.height*proportion)),
+                           resample=Image.BICUBIC)
+    return leaf
 
 
 @reg('s')
@@ -715,7 +722,7 @@ def roundpetal(size, c=FLOWER, petals=5, gradation=100, floret=10):
     bcol =  rated_jitter(RGBColor(c),10).ctoi()
     gradation = int(prevset('f', 'gradation', gradation))/100.0
     n = int(prevset('f', 'petals', petals, 3, 6))
-    floret = prevset('f', 'floret', floret, 25, 50)
+    floret = prevset('f', 'floret', floret, 0, 50)
    
     mask = Image.new('L',(size, size), 0)
     
@@ -731,6 +738,11 @@ def roundpetal(size, c=FLOWER, petals=5, gradation=100, floret=10):
         mask.paste(p,(0,0),p)
 
     W,H = mask.size
+
+    dr = ImageDraw.Draw(mask)
+    cx,cy,r = W//2, H//2, (W*0.2)//2
+    dr.ellipse((cx-r,cy-r,cx+r,cy+r), fill=255)
+
     if gradation != 0:
         brigt = brightness(RGBColor(bcol),f=gradation)
     else:
@@ -804,7 +816,7 @@ def daisy(size, c=FLOWER, petals=14, gradation=100, floret=20):
 
 
 @reg('f')
-def cordata(size, c=FLOWER, spike=65):
+def fishmint(size, c=FLOWER, spike=65):
     """ドクダミ spike:穂状花序のsizeとの比率"""
     spike = int(prevset('f', 'spike', spike, 10)/100.0 * size)
     base = Image.new('RGBA',(size,size),(0,0,0,0))
@@ -876,19 +888,24 @@ def pointedpetal(size, c=FLOWER, petals=5, weight=1.7, stimen=2):
 
     base = Image.new('RGBA', (W,H), (0,0,0,0))
     base.paste(rgb, (0,0), mask)
+   
+    return drawstimmen(base, bcol, stimen)
 
-    st = Image.new('RGBA',base.size,(0,0,0,0))
+
+def drawstimmen(base, bcol, num):
+    st = Image.new('RGBA', base.size, (0,0,0,0))
     drw = ImageDraw.Draw(st)
     cx = base.width//2
     l = int(cx * 0.40)
     darker = brightness(RGBColor(bcol),f=0.3).ctoi()
     drw.arc((cx-l,cx,cx+l,cx+2*l), start=200, end=270,
            fill=darker, width=2)
-    for i in range(stimen):
-        ss = st.rotate((i-stimen//2)*10)
+    for i in range(num):
+        ss = st.rotate((i-num//2)*10)
         base.paste(ss,(i*2,i*2),ss)
-   
+
     return base
+   
 
 # 葉(色違い)
 @reg('f')
