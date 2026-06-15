@@ -521,10 +521,6 @@ def gui_main(modlist: Modules, mods, param: Param,
                 update_image(wn, '-img-', preview)
             else:
                 print("DON'T CLOSE DIALOGUE")
-            while True:  # 元windowのイベント破棄
-                ev, va = wn.read(timeout=0)
-                if ev == "-TIMEOUT-":
-                    break
             continue
         elif ev == 'Hold':
             param.keep(modname, image)
@@ -544,19 +540,6 @@ def gui_main(modlist: Modules, mods, param: Param,
                 scale, cropos = set_scale_init(param.width, param.height)
                 preview = render_preview(image, scale, cropos)
                 update_image(wn, '-img-', preview)
-            continue
-        elif ev.startswith('AE_'):
-            efx_name = ev[3:]
-            if efx_name in efxlist.modules:
-                image = efxs[efx_name].efx(image, param)
-                scale, cropos = set_scale_init(param.width, param.height)
-                if image is not None:
-                    preview = render_preview(image, scale, cropos)
-                    update_image(wn, '-img-', preview)
-                while True:  # 元windowのイベント破棄
-                    ev, va = wn.read(timeout=0)
-                    if ev == "-TIMEOUT-":
-                        break
             continue
         elif ev in ('-color1-3', '-color2-3', '-color3-3'):
             wgt = wn['-img-'].widget

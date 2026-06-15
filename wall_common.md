@@ -177,15 +177,12 @@
 
 ### 使い方例
 
-- EfxModules.modules で読み込み済モジュールを確認、EfxModuiles.mod_type[<モジュール名>] でAdterEffectモジュールの提供機能名を取得。
+- ExfModules.modules で読み込み済モジュールを確認、ExfModuiles.mod_type[<モジュール名>] でAdterEffectモジュールの提供機能名を取得。
   - 例： mod_type['shade']  shadeモジュールで提供されるサブモジュール情報、
   -   mod_type\['shade']\['mask'] = ’draw_ladder_mask’  shadeモジュールで提供されるmask関数 引数は draw_ladder_mask(width, height) になる
   - mod_type\['shade']\['proc'] = ('add_silhouette','mask')  shadeモジュールで提供されるproc関数 引数は add_sillhouette(base_image, mask_image) になる
-- メインプログラムからの呼び出しは以下の通り、モジュール内で efx() を定義すること。
-  - **efxs[ efx_name ].efx( image: Image.Image, p: Param) --> Image.Image**
-
-
-
+- proc= (<関数名>,None) とか (<関数名>,<ファイル名>) といったケースも考えられるが、生煮えでどこまで対応できるか検討中
+- GUIも検討中 
 
 ## 背景画像生成：
 
@@ -284,4 +281,5 @@
       ```
 
       
+
 
