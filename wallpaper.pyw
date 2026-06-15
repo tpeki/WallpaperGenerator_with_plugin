@@ -700,8 +700,8 @@ if __name__ == '__main__':
         exit()
     args = parser.parse_args()
 
-    if winwall.is_windows():
-        winwall.cache_cleanup()
+    # if winwall.is_windows():
+    #     winwall.cache_cleanup()
     
     modlist = Modules()
     mods = search_modules(modlist, args.plugin_dir)

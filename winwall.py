@@ -108,6 +108,12 @@ def set_img_to_wp(img, typ='.bmp'):
 
     cache_dir = os.path.join(tempfile.gettempdir(),"wp_cache")
     os.makedirs(cache_dir, exist_ok=True)
+    for f in glob.glob(cache_dir+'\\*.*'):
+        try:
+            os.remove(f)
+        except:
+            pass
+
     fname = f'temp_wallpaper{time.time_ns()}'+typ
 
     try:
