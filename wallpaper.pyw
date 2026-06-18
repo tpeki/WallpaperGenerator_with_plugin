@@ -136,7 +136,7 @@ def search_aftereffects(efxlist: EfxModules, plugin_dir):
 # ----
 def layout(modlist, efxlist):
     x = ['AE_'+item for item in efxlist.modules]
-    menudef = [['File', ['Save', 'Exit']],
+    menudef = [['File', ['Load BG', '---', 'Save', 'Exit']],
                ['Module', modlist.modules],
                ['Hold', ['Hold', 'Clear', 'Retrieve']],
                ['Effects', x],
@@ -357,6 +357,14 @@ def update_image(window, key, image):
 
     window._img_bytes = data
     window[key].update(data=data)
+
+
+def load_bgimage():
+    Ftypes = [('PNG','*.png'),('JPG','*.jpg'),('Any','*.*'),]
+    src_path = get_openfile('', filetypes=Ftypes)
+    if pa.exists(src_path):
+        return Image.open(src_path)
+    return None
 
 
 def gui_main(modlist: Modules, mods, param: Param,
@@ -591,6 +599,26 @@ def gui_main(modlist: Modules, mods, param: Param,
                     ev, va = wn.read(timeout=0)
                     if ev == "-TIMEOUT-":
                         break
+        elif ev == 'Load BG':
+            bg = load_bgimage().convert('RGBA')
+            scale, cropos = set_scale_init(param.width, param.height)
+            if bg is not None:
+                bg = bg.resize((param.width, param.height),
+                               resample=Image.LANCZOS)
+                param.keep(modname, bg)
+            
+                image = get_image_thread(wn, param, mods, modname)
+                scale, cropos = set_scale_init(param.width, param.height)
+                if image is not None:
+                    preview = render_preview(image, scale, cropos)
+                    update_image(wn, '-img-', preview)
+                else:
+                    print("DON'T CLOSE DIALOGUE")
+                while True:  # 元windowのイベント破棄
+                    ev, va = wn.read(timeout=0)
+                    if ev == "-TIMEOUT-":
+                        break
+            continue
         elif isinstance(ev, str):
             widg = ev[1:-2]
             # print( widg )
