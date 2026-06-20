@@ -48,6 +48,11 @@ def kaleidoscope(img, L, angle, atten):
     h, w = src.shape[:2]
     sx = min((w-ow)//2, L//2)
     sy = min((h-oh)//2, L//2)
+    if sx <= 0:
+        sx = 1
+    if sy <= 0:
+        sy = 1
+        
     cx = w/2 + np.random.randint(sx)
     cy = h/2 + np.random.randint(sy)
 

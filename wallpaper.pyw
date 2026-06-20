@@ -1,11 +1,7 @@
 '''wallpaper : 壁紙用シンプル画像生成
-v1.0.0 2025/12/26 stagger-tiled-stripeのパターン生成スクリプト(単発)版
+v2.3.1 2026/06/20 current
 v2.0.0 2025/12/29 モジュール構成にして、複数のパターン作成に対応
-v2.0.1 2026/01/01 コマンドラインオプションを追加 (.pywだとヘルプが出ない)
-v2.0.2 2026/01/03 色選択部品の挙動を修正。ペンローズタイルモジュール追加
-v2.0.3 2026/01/05 Save asダイアログを表示するようにした。
-                  CLIの色指定修正(setattrではstrのまま設定してしまう)
-
+v1.0.0 2025/12/26 stagger-tiled-stripeのパターン生成スクリプト(単発)版
 協力：Google Gemini; モジュールのアルゴリズム作成支援(numpy使う手があったなんて)
 謝辞：Kujira Handさん; TkEasyGUIがなければGUIアプリにしようと思いませんでした
       Microsoft: 鬱陶しいWindowsスポットライトが作成の原動力になりました
@@ -18,7 +14,7 @@ import os.path as pa
 import argparse
 import glob
 import random
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import TkEasyGUI as sg
 import threading
 import queue
@@ -85,9 +81,9 @@ def search_aftereffects(efxlist: EfxModules, plugin_dir):
     return aftereffects
 
 
-# モジュールファイルで作成必要なAPI関数
+# ■ MODモジュールファイルで作成必要なAPI関数
 #
-#    def intro(modlist: Modules, module_name):
+#    def intro(modlist: Modules, module_name): MODモジュール登録
 #        modlist.add_module(module_name, 'ストライプ(タイル)',
 #                           ['color1', 'color_jitter', 'pwidth', 'pheight',
 #                            'sub_jitter'])
@@ -118,17 +114,34 @@ def search_aftereffects(efxlist: EfxModules, plugin_dir):
 #       設定変更の結果壁紙生成結果が変更される場合、imageを返すと
 #       メイン画面のサンプル画像を更新する
 #
-# モジュールの呼び出し方
+# 【モジュールの呼び出し方】
 # (1) モジュールを検索登録する
-# modlist = Modules()
-# p = Param()
-# m = search_modules(modlist, plugin_dir)
+#   modlist = Modules()
+#   p = Param()
+#   m = search_modules(modlist, plugin_dir)
 #
 # (2) モジュールの関数を呼び出す
-# modlist.modules == [module-name1, module-name2, ...] : 導入したモジュール名
-# modlist.mod_gui[module-name] : モジュールで利用するGUI項目、入ってるものだけ表示
-# mods[module-name].default_param(p) : おすすめ初期パラメータを設定
-# image = mods[module-name].generate(p)  : 画像を生成
+#   modlist.modules == [module-name1, module-name2, ...] : 導入したモジュール名
+#   modlist.mod_gui[module-name] : モジュールで利用するGUI項目(UI表示対象)
+#   mods[module-name].default_param(p) : おすすめ初期パラメータを設定
+#   image = mods[module-name].generate(p)  : 画像を生成
+
+# ■ EFXモジュールファイルで作成必要なAPI関数
+#
+#    def efx(image: Image.Image, p: Param):  エフェクト設定画面/イメージ生成
+#       imageに対してエフェクトを加える
+#       p.width,p.height, p.bg() あたりを利用
+#       p.colorなどmodで利用するパラメータは利用しないこと
+#
+#    def intro(efxlist: EfxModules, module_name): EFXモジュール登録
+#
+#【モジュールの呼び出し方】
+# (1) モジュールを検索登録する
+#   efxlist = EfxModules()
+#   efxs = search_aftereffects(efxlist, plugin_dir)
+#
+# (2) モジュールの関数を呼び出す
+#   image = efxs[module-name].efx(image, p)
 
 
 # ----
@@ -142,54 +155,39 @@ def layout(modlist, efxlist):
                ['Effects', x],
                ]
     
+    color_column_layout = [
+        [sg.Text('Base Color:', key='-color1-0', size=(8,1)),
+         sg.Text('0,0,0', key='-color1-1', size=(9,1)),
+         sg.Button('...', key='-color1-2'),
+         sg.Button('?', key='-color1-3')],
+        [sg.Text('Second Color:', key='-color2-0', size=(8,1)),
+         sg.Text('0,0,0', key='-color2-1', size=(9,1)),
+         sg.Button('...', key='-color2-2'),
+         sg.Button('?', key='-color2-3')],
+        [sg.Text('Third Color:', key='-color3-0', size=(8,1)),
+         sg.Text('0,0,0', key='-color3-1', size=(9,1)),
+         sg.Button('...', key='-color3-2'),
+         sg.Button('?', key='-color3-3')]
+        ]
     
-    color_column_layout = [[sg.Text('Base Color:', key='-color1-0',
-                                    size=(8,1)),
-                            sg.Text('0,0,0', key='-color1-1',
-                                    size=(9,1)),
-                            sg.Button('...', key='-color1-2'),
-                            sg.Button('?', key='-color1-3')
-                            ],
-                           [sg.Text('Second Color:', key='-color2-0',
-                                    size=(8,1)),
-                            sg.Text('0,0,0', key='-color2-1',
-                                    size=(9,1)),
-                            sg.Button('...', key='-color2-2'),
-                            sg.Button('?', key='-color2-3')
-                            ],
-                           [sg.Text('Third Color:', key='-color3-0',
-                                    size=(8,1)),
-                            sg.Text('0,0,0', key='-color3-1',
-                                    size=(9,1)),
-                            sg.Button('...', key='-color3-2'),
-                            sg.Button('?', key='-color3-3')
-                            ]]
-    jitter_column_layout = [[sg.Text('Color Mod1:', key='-color_jitter-0',
-                                    size=(10,1)),
-                             sg.Input('0', key='-color_jitter-1',
-                                    enable_events=True, size=(3,1))],
-                            [sg.Text('Color Mod2:', key='-sub_jitter-0',
-                                    size=(10,1)),
-                             sg.Input('0', key='-sub_jitter-1',
-                                    enable_events=True, size=(3,1))],
-                            [sg.Text('Color Mod3:', key='-sub_jitter2-0',
-                                    size=(10,1)),
-                             sg.Input('0', key='-sub_jitter2-1',
-                                    enable_events=True, size=(3,1))],
-                            ]
-    pattern_column_layout = [[sg.Text('Pattern1:', key='-pwidth-0',
-                                    size=(10,1)),
-                             sg.Input('0', key='-pwidth-1',
-                                    enable_events=True, size=(3,1))],
-                            [sg.Text('Pattern2:', key='-pheight-0',
-                                    size=(10,1)),
-                             sg.Input('0', key='-pheight-1',
-                                    enable_events=True, size=(3,1))],
-                            [sg.Text('Pattern3:', key='-pdepth-0',
-                                    size=(10,1)),
-                             sg.Input('0', key='-pdepth-1',
-                                    enable_events=True, size=(3,1))],
-                            ]
+    jitter_column_layout = [
+        [sg.Text('Color Mod1:', key='-color_jitter-0', size=(10,1)),
+         sg.Input('0', key='-color_jitter-1', enable_events=True, size=(3,1))],
+        [sg.Text('Color Mod2:', key='-sub_jitter-0', size=(10,1)),
+         sg.Input('0', key='-sub_jitter-1', enable_events=True, size=(3,1))],
+        [sg.Text('Color Mod3:', key='-sub_jitter2-0', size=(10,1)),
+         sg.Input('0', key='-sub_jitter2-1', enable_events=True, size=(3,1))],
+        ]
+    
+    pattern_column_layout = [
+        [sg.Text('Pattern1:', key='-pwidth-0', size=(10,1)),
+         sg.Input('0', key='-pwidth-1', enable_events=True, size=(3,1))],
+        [sg.Text('Pattern2:', key='-pheight-0', size=(10,1)),
+         sg.Input('0', key='-pheight-1', enable_events=True, size=(3,1))],
+        [sg.Text('Pattern3:', key='-pdepth-0', size=(10,1)),
+         sg.Input('0', key='-pdepth-1', enable_events=True, size=(3,1))],
+        ]
+    
     if winwall.is_windows():
         setwp = [sg.Checkbox('tile', default=False, key='-wptl-'),
                  sg.Button('SetWP', key='-setwp-',
@@ -197,36 +195,35 @@ def layout(modlist, efxlist):
                  ]
     else:
         setwp = (None)
-    file_and_button_column = [[sg.Text('File Name:', text_color='#0022ff'),
-                               sg.Text('', expand_x=True, key='-fname-')],
-                              [sg.Text('', expand_x=True),
-                               *setwp,
-                               ],
-                              [sg.Text('', expand_x=True),
-                               sg.Button('Redo', key='-redo-',
-                                         background_color='#ffffdd'),
-                               sg.Button('Save', key='-ok-',
-                                         background_color='#ddffdd'),
-                               sg.Text('　'),
-                               sg.Button('Quit', key='-done-',
-                                         background_color='#ffdddd'),
-                               ]
-                              ]
-    layout = [[sg.Menu(menudef, key='-mnu-')],
-              [sg.Text('', key='-modname-'), sg.Text(' '),
-               sg.Text('', key='-moddesc-', expand_x=True),
-               sg.Text('',expand_x=True), sg.Text('Size:'),
-               sg.Input('width', key='-width-', size=(4,1)), sg.Text('x'),
-               sg.Input('height', key='-height-', size=(4,1))],
-              [sg.Text('',expand_x=True),
-               sg.Image(key='-img-', background_color="#7f7f7f",
-                        size=PREVIEW_SIZE, enable_events=True),
-               sg.Text('',expand_x=True)],
-              [sg.Column(layout=color_column_layout),
-               sg.Column(layout=jitter_column_layout),
-               sg.Column(layout=pattern_column_layout, expand_x=True),
-               sg.Column(layout=file_and_button_column)]
-              ]
+        
+    file_and_button_column = [
+        [sg.Text('File Name:', text_color='#0022ff'),
+         sg.Text('', expand_x=True, key='-fname-')],
+        [sg.Text('', expand_x=True),
+         *setwp, ],
+        [sg.Text('', expand_x=True),
+         sg.Button('Redo', key='-redo-', background_color='#ffffdd'),
+         sg.Button('Save', key='-ok-', background_color='#ddffdd'),
+         sg.Text('　'),
+         sg.Button('Quit', key='-done-', background_color='#ffdddd'),]
+        ]
+    
+    layout = [
+        [sg.Menu(menudef, key='-mnu-')],
+        [sg.Text('', key='-modname-'), sg.Text(' '),
+         sg.Text('', key='-moddesc-', expand_x=True),
+         sg.Text('',expand_x=True), sg.Text('Size:'),
+         sg.Input('width', key='-width-', size=(4,1)), sg.Text('x'),
+         sg.Input('height', key='-height-', size=(4,1))],
+        [sg.Text('',expand_x=True),
+         sg.Image(key='-img-', background_color="#7f7f7f",
+                  size=PREVIEW_SIZE, enable_events=True),
+         sg.Text('',expand_x=True)],
+        [sg.Column(layout=color_column_layout),
+         sg.Column(layout=jitter_column_layout),
+         sg.Column(layout=pattern_column_layout, expand_x=True),
+         sg.Column(layout=file_and_button_column)]
+        ]
 
     return layout
 
@@ -359,12 +356,31 @@ def update_image(window, key, image):
     window[key].update(data=data)
 
 
-def load_bgimage():
-    Ftypes = [('PNG','*.png'),('JPG','*.jpg'),('Any','*.*'),]
+def update_preview(param, image, wn):
+    scale, cropos = set_scale_init(param.width, param.height)
+    if image is not None:
+        preview = render_preview(image, scale, cropos)
+        update_image(wn, '-img-', preview)
+    else:
+        print("DON'T CLOSE DIALOGUE")
+    while True:  # 元windowのイベント破棄
+        ev, va = wn.read(timeout=0)
+        if ev == "-TIMEOUT-":
+            break
+    return scale, cropos
+
+
+def load_bgimage(p):
+    Ftypes = [('Image file','*.png *.jpg *.bmp *.gif'),('Any','*.*'),]
     src_path = get_openfile('', filetypes=Ftypes)
-    if pa.exists(src_path):
-        return Image.open(src_path)
-    return None
+    if src_path is None or not pa.exists(src_path):
+        return None
+    try:
+        with Image.open(src_path) as bitmap:
+            return ImageOps.fit(bitmap, (p.width, p.height),
+                                method=Image.LANCZOS)
+    except Image.UnidentifiedImageError:
+        return None
 
 
 def gui_main(modlist: Modules, mods, param: Param,
@@ -498,12 +514,7 @@ def gui_main(modlist: Modules, mods, param: Param,
             
             param.width, param.height = w, h
             image = get_image_thread(wn, param, mods, modname)
-            scale, cropos = set_scale_init(w, h)
-            if image is not None:
-                preview = render_preview(image, scale, cropos)
-                update_image(wn, '-img-', preview)
-            else:
-                print("DON'T CLOSE DIALOGUE")
+            scale, cropos = update_preview(param, image, wn)
             continue
         elif ev == '-setwp-':
             if va['-wptl-']:  # タイリングするか
@@ -523,22 +534,15 @@ def gui_main(modlist: Modules, mods, param: Param,
             set_param(wn,param, modlist.mod_gui[modname])
 
             image = get_image_thread(wn, param, mods, modname)
-            scale, cropos = set_scale_init(param.width, param.height)
-            if image is not None:
-                preview = render_preview(image, scale, cropos)
-                update_image(wn, '-img-', preview)
-            else:
-                print("DON'T CLOSE DIALOGUE")
-            while True:  # 元windowのイベント破棄
-                ev, va = wn.read(timeout=0)
-                if ev == "-TIMEOUT-":
-                    break
+            scale, cropos = update_preview(param, image, wn)
             continue
         elif ev == 'Hold':
             param.keep(modname, image)
             continue
         elif ev == 'Clear':
             param.unkeep()
+            image = get_image_thread(wn, param, mods, modname)
+            scale, cropos = update_preview(param, image, wn)
             continue
         elif ev == 'Retrieve':
             t = param.retrieve()
@@ -548,23 +552,14 @@ def gui_main(modlist: Modules, mods, param: Param,
                 param.savefile = ''
                 set_param(wn, param, modlist.mod_gui[t])
                 modname = t
-                image = param.bg()
-                scale, cropos = set_scale_init(param.width, param.height)
-                preview = render_preview(image, scale, cropos)
-                update_image(wn, '-img-', preview)
+                image = get_image_thread(wn, param, mods, modname)  # param.bg()
+                scale, cropos = update_preview(param, image, wn)
             continue
         elif ev.startswith('AE_'):
             efx_name = ev[3:]
             if efx_name in efxlist.modules:
                 image = efxs[efx_name].efx(image, param)
-                scale, cropos = set_scale_init(param.width, param.height)
-                if image is not None:
-                    preview = render_preview(image, scale, cropos)
-                    update_image(wn, '-img-', preview)
-                while True:  # 元windowのイベント破棄
-                    ev, va = wn.read(timeout=0)
-                    if ev == "-TIMEOUT-":
-                        break
+                scale, cropos = update_preview(param, image, wn)
             continue
         elif ev in ('-color1-3', '-color2-3', '-color3-3'):
             wgt = wn['-img-'].widget
@@ -591,16 +586,14 @@ def gui_main(modlist: Modules, mods, param: Param,
                 retv = mods[modname].desc(param)
                 if isinstance(retv, Image.Image):
                     image = retv
-                    scale, cropos = set_scale_init(param.width, param.height)
-                    preview = render_preview(image, scale, cropos)
-                    update_image(wn, '-img-', preview)
+                    scale, cropos = update_preview(param, image, wn)
                     set_param(wn, param, modlist.mod_gui[modname])
-                while True:
-                    ev, va = wn.read(timeout=0)
-                    if ev == "-TIMEOUT-":
-                        break
+            continue
         elif ev == 'Load BG':
-            bg = load_bgimage().convert('RGBA')
+            bg = load_bgimage(param)
+            if bg is None:
+                continue
+            bg = bg.convert('RGBA')
             scale, cropos = set_scale_init(param.width, param.height)
             if bg is not None:
                 bg = bg.resize((param.width, param.height),
@@ -608,16 +601,7 @@ def gui_main(modlist: Modules, mods, param: Param,
                 param.keep(modname, bg)
             
                 image = get_image_thread(wn, param, mods, modname)
-                scale, cropos = set_scale_init(param.width, param.height)
-                if image is not None:
-                    preview = render_preview(image, scale, cropos)
-                    update_image(wn, '-img-', preview)
-                else:
-                    print("DON'T CLOSE DIALOGUE")
-                while True:  # 元windowのイベント破棄
-                    ev, va = wn.read(timeout=0)
-                    if ev == "-TIMEOUT-":
-                        break
+                scale, cropos = update_preview(param, image, wn)
             continue
         elif isinstance(ev, str):
             widg = ev[1:-2]

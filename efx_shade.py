@@ -94,10 +94,11 @@ def storehist(name, value, funcname):
 
 # MASK functions
 @reg(display='Checker')
-def checker_mask(W, H, Pitch=640, Angle=0):
+def checker_mask(W, H, Pitch=640, Skew=50, Angle=0):
     """チェック"""
     Pitch = prevset('Pitch', Pitch, 'checker_mask', 0)
     Angle = prevset('Angle', Angle, 'checker_mask') % 360
+    Skew = prevset('Skew', Skew, 'checker_mask', 1, 100) / 100
 
     theta = np.deg2rad(Angle)
     cos_t = np.cos(theta)
@@ -117,17 +118,52 @@ def checker_mask(W, H, Pitch=640, Angle=0):
     yr = -xg * sin_t + yg * cos_t
 
     # 中央がマス中心になるよう半マスずらす
-    S = Pitch / 2
-    ix = np.floor((xr + S/2) / S).astype(int)
-    iy = np.floor((yr + S/2) / S).astype(int)
+    bandw = Pitch * Skew
 
-    npmask = ((ix + iy) & 1) == 0
+    band_x = np.mod(xr, Pitch) < bandw
+    band_y = np.mod(yr, Pitch) < bandw
+    npmask = band_x ^ band_y
 
     img_array = (npmask * 255).astype(np.uint8)
     mask = Image.fromarray(img_array, mode="L")
 
     return mask
- 
+
+
+@reg(display='Houndstooth')
+def chidori_mask(W, H, Pitch=300, Twill=50, Angle=0):
+    """千鳥格子"""
+    Pitch = prevset('Pitch', Pitch, 'chidori_mask', 0)
+    Angle = prevset('Angle', Angle, 'chidori_mask') % 360
+    Twill = prevset('Twill', Twill, 'chidori_mask', 0, 200) / 100
+    
+    theta = np.deg2rad(Angle)
+
+    yg, xg = np.mgrid[0:H, 0:W]
+
+    cx = W/2
+    cy = H/2
+
+    xg = xg - cx
+    yg = yg - cy
+
+    xr = xg*np.cos(theta) + yg*np.sin(theta)
+    yr = -xg*np.sin(theta) + yg*np.cos(theta)
+
+    xi = np.floor(xr).astype(np.int32)
+    yi = np.floor(yr).astype(np.int32)
+
+    warp_grid = ((xi // (Pitch//2)) & 1)
+    weft_grid = ((yi // (Pitch//2)) & 1)
+
+    weave = max(1, int(Twill * Pitch / 2))
+    weave_mask = ((xi + yi) % (2*weave)) < weave
+
+    raw_fabric = np.where(weave_mask, warp_grid, weft_grid).astype(np.uint8)
+    img = Image.fromarray(raw_fabric * 255, mode='L')
+    
+    return img
+
 
 @reg(display='Mesh')
 def wiremesh_mask(W, H, Pitch=135, Thickness=53,
@@ -155,7 +191,7 @@ def wiremesh_mask(W, H, Pitch=135, Thickness=53,
 
 
 @reg(display='Stripe')
-def stripe_mask(W, H, Pitch=135, Thickness=30, Angle=72):
+def stripe_mask(W, H, Pitch=135, Thickness=75, Angle=89):
     """ストライプ"""
     # Pitch = 135        線間隔
     # Thickness = 53     線幅

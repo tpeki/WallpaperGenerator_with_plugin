@@ -79,17 +79,17 @@ def desc(p):
     params = [p.pwidth, p.pheight, p.pdepth]
     
     base_colors_section = [[sg.Text('Diamond', font=('',14,'bold'))],
-                           basic_color_line(1, base_colors[0], 'Color1:'),
-                           basic_color_line(2, base_colors[1], 'Color22:'),
-                           basic_color_line(3, base_colors[2], 'BackGround:'),
+                           basic_color_line(1, base_colors[0], 'Color1'),
+                           basic_color_line(2, base_colors[1], 'Color2'),
+                           basic_color_line(3, base_colors[2], 'BackGround'),
                            ]
     stitch_colors_section = [[sg.Text('Stitch', font=('',14,'bold')),
                               sg.Text('', expand_x=True),
                               sg.Button('Fit all to 1st', key='-fit-',
                                         background_color='#ffffdd')],
-                             stitch_color_line(1, stitch_colors[0], 'Cell 1:'),
-                             stitch_color_line(2, stitch_colors[1], 'Cell 2:'),
-                             stitch_color_line(3, stitch_colors[2], 'BG Cell:'),
+                             stitch_color_line(1, stitch_colors[0], 'Cell 1'),
+                             stitch_color_line(2, stitch_colors[1], 'Cell 2'),
+                             stitch_color_line(3, stitch_colors[2], 'BG Cell'),
                              ]
     basic_section = [[sg.Text('Pitch', size=(12,1)),
                       sg.Input(f'{params[0]}', key='-bas1-', size=(4,1))],

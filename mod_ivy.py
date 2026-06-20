@@ -36,6 +36,7 @@ ivy_preserv = {'shapes': None,
                'grid': 'hangdown',
                'brick': True,
                'set': 'ivy',
+               'basep': {},
                }
 
 RECOMMEND = [['all', None, None],
@@ -235,6 +236,9 @@ def desc(p: Param):
     glo = make_cat_layout(ivy_preserv['grids'], 'gfn', ivy_preserv['grid'])
     recommend_names = [r[0] for r in RECOMMEND]
 
+    ivy_preserv['basep'] = {'c1':p.color1, 'c2':p.color2, 'c3':p.color3,
+                            'angl':p.sub_jitter, 'fnum':p.sub_jitter2}
+
     while True:
         retv = desc_(p, slo, flo, glo, rec)
         if isinstance(retv, str):
@@ -243,19 +247,65 @@ def desc(p: Param):
                 slo, flo = set_layout(retv)
             continue
         else:
+            ivy_preserv['basep'] = {}
             return retv
     return None    
 
 
+def colrspec(color):
+    r,g,b = color.ctoi()
+    fg,bg = bg_and_font(color)
+    ctxt = f'{r},{g},{b}'
+    x = color.ctox()
+    return ctxt, fg, bg, x
+
+def safeint(s, fallback=0):
+    try:
+        i = int(s)
+    except ValueError:
+        i = fallback
+    return i
+
 def desc_(p: Param, slo, flo, glo, rec):
      
     recommend_names = [r[0] for r in RECOMMEND]
+    leftupper = [[sg.Frame('Shapes', layout=slo, relief='ridge',
+                           expand_x=True)],
+                 [sg.Frame('Flowers', layout=flo, relief='ridge',
+                           expand_x=True)],
+                 [sg.Text(expand_y=True)],
+                 ]
+
+    c1txt, fg1, bg1 ,x1 = colrspec(ivy_preserv['basep']['c1'])
+    c2txt, fg2, bg2 ,x2 = colrspec(ivy_preserv['basep']['c2'])
+    c3txt, fg3, bg3 ,x3 = colrspec(ivy_preserv['basep']['c3'])
+    angl = ivy_preserv['basep']['angl']
+    fnum =  ivy_preserv['basep']['fnum']
+
+    rightupper = [[sg.Text('Leaf '+c1txt, key='-c1t-',
+                           size=(15,1), text_color=fg1, background_color=bg1),
+                   sg.Button('...', key='-c1c-')],
+                  [sg.Text('Flower '+c2txt, key='-c3t-',
+                           size=(15,1), text_color=fg3, background_color=bg3),
+                   sg.Button('...', key='-c3c-')],
+                  [sg.Text('Angle', size=(6,1)),
+                   sg.Input(f'{angl}', key='-angl-', size=(4,1))],
+                  [sg.Text('FNums', size=(6,1)),
+                   sg.Input(f'{fnum}', key='-fnum-', size=(4,1))],
+                  [sg.Text('')],
+                  [sg.Text('Brick '+c2txt, key='-c2t-',
+                           size=(15,1), text_color=fg2, background_color=bg2),
+                   sg.Button('...', key='-c2c-')],
+                  [sg.Checkbox('Brick', default=ivy_preserv['brick'],
+                               key='-brick-')],
+                  [sg.Text(expand_y=True)],
+                  ]
     
-    lo = [[sg.Frame('Shapes', layout=slo, relief='ridge', expand_x=True)],
-          [sg.Frame('Flowers', layout=flo, relief='ridge', expand_x=True)],
+    lo = [[sg.Column(leftupper, expand_x=True, expand_y=True),
+           sg.Frame('BasicParams', layout=rightupper,
+                 relief='ridge', expand_x=True, expand_y=True)],
           [sg.Frame('Grids', layout=glo, relief='ridge', expand_x=True)],
-          [sg.Checkbox('Brick', default=ivy_preserv['brick'], key='-brick-'),
-           sg.Text('Shape set', width=20, text_align='right'),
+          [sg.Text('Shape set', background_color='#ffffaa'),
            sg.Combo(recommend_names, default_value=rec,
                        readonly=True, key='-recommend-',
                        enable_events=True),
@@ -278,15 +328,42 @@ def desc_(p: Param, slo, flo, glo, rec):
         if ev == '-can-' or ev == sg.WINDOW_CLOSED:
             change = False
             break
-        if ev == '-ok-':
+        elif ev == '-ok-':
             change = True
             break
-        if ev == '-recommend-':
+        elif ev == '-c1c-':
+            colr = sg.popup_color(default_color=x1)
+            if colr is not None and colr != x1:
+                colr = RGBColor(colr)
+                c1txt, fg1, bg1, x1 = colrspec(colr)
+                wn[f'-c1t-'].update('Leaf '+c1txt,
+                                    text_color=fg1, background_color=bg1)
+                ivy_preserv['basep']['c1'] = colr
+        elif ev == '-c2c-':
+            colr = sg.popup_color(default_color=x2)
+            if colr is not None and colr != x2:
+                colr = RGBColor(colr)
+                c2txt, fg2, bg2, x2 = colrspec(colr)
+                wn[f'-c2t-'].update('Brick '+c2txt,
+                                    text_color=fg2, background_color=bg2)
+                ivy_preserv['basep']['c2'] = colr
+        elif ev == '-c3c-':
+            colr = sg.popup_color(default_color=x3)
+            if colr is not None and colr != x3:
+                colr = RGBColor(colr)
+                c3txt, fg3, bg3, x3 = colrspec(colr)
+                wn[f'-c3t-'].update('Flower '+c3txt,
+                                    text_color=fg3, background_color=bg3)
+                ivy_preserv['basep']['c3'] = colr
+        elif ev == '-recommend-':
             change=False
             break
 
     wn.close()
-   
+
+    ivy_preserv['basep']['angl'] = safeint(wn['-angl-'].get())
+    ivy_preserv['basep']['fnum'] = safeint(wn['-fnum-'].get())
+  
     if change:
         for x in va.keys():
             if not '_' in x:
@@ -304,7 +381,13 @@ def desc_(p: Param, slo, flo, glo, rec):
 
         ivy_preserv['brick'] = va['-brick-'] == True
         ivy_preserv['set'] = rec
-           
+
+        p.color1 = ivy_preserv['basep']['c1']
+        p.color2 = ivy_preserv['basep']['c2']
+        p.color3 = ivy_preserv['basep']['c3']
+        p.sub_jitter = ivy_preserv['basep']['angl']
+        p.sub_jitter2 = ivy_preserv['basep']['fnum']
+
         #print(ivy_preserv)
         return generate(p)
     elif ev == '-recommend-':
