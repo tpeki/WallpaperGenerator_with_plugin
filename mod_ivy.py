@@ -11,20 +11,20 @@ import TkEasyGUI as sg
 WIDTH = 1920
 HEIGHT = 1080
 
-COLOR1 = '#106001'
-COLOR_JITTER = 40
-BGCOLOR = '#66543B'  # 煉瓦
-MCOLOR = '#DCDCDC'  #モルタル
-FUCHI = '#EDE1A8'  # 斑
-FLOWER = '#F7C7F2'
+COLOR1 = '#106001'  # 葉の基本色
+COLOR_JITTER = 12  # 色ゆらぎ
+BGCOLOR = '#66543B'  # 煉瓦色
+MCOLOR = '#DCDCDC'  #モルタル部分の色
+FUCHI = '#EDE1A8'  # 斑入り葉の斑部色
+FLOWER = '#F7C7F2'  # 花の基本色
 
-ROT = 15
+ROT = 45  # 角度ゆらぎ
+FLOWER_P = 0  # 花の割合
 
-LEAFSIZE = 43
-LEAFDIST = 130
-BRICKSIZE = 71
-BRICKPROP = 2
-FLOWER_P = 0
+LEAFSIZE = 43  # 葉の基本サイズ
+LEAFDIST = 130  # 間隔 (100で1/2幅オーバーラップ)
+BRICKSIZE = 71  # 背景ブロック短辺
+BRICKPROP = 2  # 背景ブロックの縦横比
 
 LEAF_DFL = 100
 
@@ -34,6 +34,7 @@ ivy_preserv = {'shapes': None,
                'shape': 'ivy',
                'flower': 'horn',
                'grid': 'hangdown',
+               'flower_jitter': None,
                'brick': True,
                'set': 'ivy',
                'basep': {},
@@ -41,15 +42,19 @@ ivy_preserv = {'shapes': None,
 
 RECOMMEND = [['all', None, None],
              # index, shape, [flowers],
-             ['ivy', ['ivy'], None],
+             ['ivy', ['ivy'], ['horn', 'pointedpetal', 'roundpetal', 'leaves']],
              ['sasa', ['sasa', 'sasavarie'], None],
              ['tsutsuji', ['azarea'], ['pointedpetal', 'roundpetal']],
-             ['asagao', ['asagao'], ['horn']],
-             ['kanamemochi', ['holly'], ['leaves', 'roundpetal']],
+             ['asagao', ['asagao'], ['horn', 'roundpetal']],
+             ['kanamemochi', ['holly'], ['leaves', 'pointedpetal']],
              ['dokudami', ['heart'], ['fishmint']],
-             ['oshiroibana', ['heart'], ['roundpetal', 'pointedpetal']],
-             ['kinshibai', ['branch'], ['roundpetal']],
+             ['oshiroibana', ['heart', 'single'], ['roundpetal', 'pointedpetal']],
+             ['kinshibai', ['branch'], ['roundpetal', 'sunflower']],
+             ['hibiscus', ['single'], ['hibiscus']],
              ]
+
+IN_ORDER = ['wobblyrect']
+TOP_FLOWER = ['hibiscus', 'sunflower', 'branch']
 
 # =========================
 # 形状登録デコレータ
@@ -100,7 +105,7 @@ def reg(kind):
 # ==========
 # module基本情報
 def intro(modlist: Modules, module_name):
-    modlist.add_module(module_name, 'ツタの葉   間隔=10x',
+    modlist.add_module(module_name, 'ツタ 色ゆらぎ初期値は葉花共通',
                        {'color1':'葉っぱ', 'color2':'壁',
                         'color3':'花',
                         'color_jitter':'色ゆらぎ',
@@ -236,7 +241,8 @@ def desc(p: Param):
     glo = make_cat_layout(ivy_preserv['grids'], 'gfn', ivy_preserv['grid'])
     recommend_names = [r[0] for r in RECOMMEND]
 
-    ivy_preserv['basep'] = {'c1':p.color1, 'c2':p.color2, 'c3':p.color3,
+    ivy_preserv['basep'] = {'c1':p.color1, 'c2':p.color2,
+                            'c3':p.color3, 'ljit':p.color_jitter,
                             'angl':p.sub_jitter, 'fnum':p.sub_jitter2}
 
     while True:
@@ -279,18 +285,30 @@ def desc_(p: Param, slo, flo, glo, rec):
     c1txt, fg1, bg1 ,x1 = colrspec(ivy_preserv['basep']['c1'])
     c2txt, fg2, bg2 ,x2 = colrspec(ivy_preserv['basep']['c2'])
     c3txt, fg3, bg3 ,x3 = colrspec(ivy_preserv['basep']['c3'])
+    ljit = ivy_preserv['basep']['ljit']
     angl = ivy_preserv['basep']['angl']
     fnum =  ivy_preserv['basep']['fnum']
+    fjit =  ivy_preserv['flower_jitter']
 
     rightupper = [[sg.Text('Leaf '+c1txt, key='-c1t-',
                            size=(15,1), text_color=fg1, background_color=bg1),
                    sg.Button('...', key='-c1c-')],
-                  [sg.Text('Flower '+c2txt, key='-c3t-',
+                  [sg.Text('Leaf C.Jitter', expand_x=True,
+                           text_align='right'),
+                   sg.Input(f'{ljit}', key='-ljit-', size=(4,1))],
+                  [sg.Text('Flower '+c3txt, key='-c3t-',
                            size=(15,1), text_color=fg3, background_color=bg3),
                    sg.Button('...', key='-c3c-')],
-                  [sg.Text('Angle', size=(6,1)),
-                   sg.Input(f'{angl}', key='-angl-', size=(4,1))],
-                  [sg.Text('FNums', size=(6,1)),
+                  [sg.Text('Flower C.Jitter', expand_x=True,
+                           text_align='right'),
+                   sg.Input(f'{fjit}', key='-fjit-', size=(4,1))],
+                  [sg.Text('')],
+                  [sg.Text('Angular Jitter', expand_x=True,
+                           text_align='right'),
+                   sg.Input(f'{angl}', key='-angl-', size=(4,1)),
+                   ],
+                  [sg.Text('Flowers Ratio', expand_x=True,
+                           text_align='right'),
                    sg.Input(f'{fnum}', key='-fnum-', size=(4,1))],
                   [sg.Text('')],
                   [sg.Text('Brick '+c2txt, key='-c2t-',
@@ -361,10 +379,12 @@ def desc_(p: Param, slo, flo, glo, rec):
 
     wn.close()
 
-    ivy_preserv['basep']['angl'] = safeint(wn['-angl-'].get())
-    ivy_preserv['basep']['fnum'] = safeint(wn['-fnum-'].get())
-  
     if change:
+        ivy_preserv['basep']['ljit'] = safeint(wn['-ljit-'].get())
+        ivy_preserv['basep']['angl'] = safeint(wn['-angl-'].get())
+        ivy_preserv['basep']['fnum'] = safeint(wn['-fnum-'].get())
+        ivy_preserv['flower_jitter'] = safeint(wn['-fjit-'].get())
+  
         for x in va.keys():
             if not '_' in x:
                 continue
@@ -385,6 +405,7 @@ def desc_(p: Param, slo, flo, glo, rec):
         p.color1 = ivy_preserv['basep']['c1']
         p.color2 = ivy_preserv['basep']['c2']
         p.color3 = ivy_preserv['basep']['c3']
+        p.color_jitter = ivy_preserv['basep']['ljit']
         p.sub_jitter = ivy_preserv['basep']['angl']
         p.sub_jitter2 = ivy_preserv['basep']['fnum']
 
@@ -438,13 +459,6 @@ def leafmask(size, c=COLOR1):
     alpha = (mask * 255).astype(np.uint8)
    
     return Image.fromarray(np.dstack([rgb, alpha]), 'RGBA')
-
-    """r,g,b = to_rgb(c)
-    vein = to_rgb([r*1.3, g*1.3, b*1.3])
-    dr = ImageDraw.Draw(img)
-    dr.line((size-1,0,0,size-1),width=2,fill=vein)
-
-    return img"""
    
 
 def leaf(size, c=COLOR1):
@@ -600,6 +614,22 @@ def azarea(size, c=COLOR1, div=6, number=5, density=1.6):
     return base
    
 
+# 一枚葉
+@reg('s')
+def single(size, c=COLOR1, aspect=0.7):
+    aspect = prevset('s', 'aspect', aspect, 0.1, 2.0)
+
+    zoomed = size*4
+    leaf = leafmask(zoomed)
+    leaf = leaf.rotate(45, expand=True)
+    leaf = leaf.crop(leaf.getbbox())
+    leaf = leaf.resize((int(zoomed*aspect),zoomed), Image.BICUBIC)
+    
+    leafs = ImageOps.pad(leaf,(size,size), method=Image.BICUBIC)
+
+    return leafs
+   
+
 # モチノキ クロオガネモチ、カナメモチ
 @reg('s')
 def holly(size, c=COLOR1, cluster=3):
@@ -718,15 +748,17 @@ def heart(size, c=COLOR1, proportion=1.0):
 
 
 @reg('s')
-def branch(size, c=COLOR1, length=3, step=15, phase=0.0):
+def branch(size, c=COLOR1, length=3, step=15, phase=0.0, scale=1.0):
     length = prevset('s', 'length', length, 1, 10)
-    step = int(prevset('s', 'step', step, 1, 100)/100 * size)
+    step = int((prevset('s', 'step', step, 1, 100)+100)/100 * size)
     phase = prevset('s', 'phase', phase, 0.0, 1.0)
+    scale = prevset('s', 'scale', scale, 0.2, 2.0)
     color = to_rgb(c)
     
-    lf = leaf(size//4)
+    stem = int(size*scale/40)
+    lf = leaf(int(size*scale))
     lx = lf.width
-    bl = (length+1)*step+lx
+    bl = int(((length+1)*step+lx)*scale*4)
     base = Image.new('RGBA',(bl,bl),(0,0,0,0))
 
     for i in range(length):
@@ -737,14 +769,19 @@ def branch(size, c=COLOR1, length=3, step=15, phase=0.0):
         
     el = lf.rotate(85, resample=Image.NEAREST, expand=False)
     base.paste(el,(0,0),el)
-    bx = base.width
+    bx,by = base.size
     dr = ImageDraw.Draw(base)
-    dr.line((*el.size, p2, p2), width=1, fill=color)
-    base_n = base.rotate(dlt(8)+37, resample=Image.BICUBIC, expand=True)
-    base_n = base_n.resize((int(bx*0.8),int(bx*0.8)),resample=Image.NEAREST)
-    nx = base_n.width
+    dr.line((*el.size, p2, p2), width=stem, fill=color)
 
-    base.paste(base_n,((bx-nx)//2,(bx-nx)//2),base_n)
+    #print(bx,by)
+    #checkmask(base, lf)
+    
+    base_n = base.rotate(dlt(8)+37, resample=Image.BICUBIC, expand=True)
+    base_n = base_n.resize((int(bx*0.8),int(by*0.8)),resample=Image.NEAREST)
+    nx, ny = base_n.size
+
+    base.paste(base_n,((bx-nx)//2,(by-ny)//2),base_n)
+    base.rotate(-5, resample=Image.BICUBIC)
     base = base.crop(base.getbbox())
 
     return base
@@ -773,9 +810,16 @@ def dlt(delta):
 # ===========
 # 花マスク(色付き)
 # ===========
+def brossom_color(c):
+    j = ivy_preserv['flower_jitter']
+    if j:
+        return rated_jitter(RGBColor(c),j)
+    else:
+        return RGBColor(c)
+    
 @reg('f')
 def horn(size, c=FLOWER):
-    bcol =  rated_jitter(RGBColor(c),10)
+    bcol =  brossom_color(c)
 
     blossom = Image.new('RGBA',(size, size),(0,0,0,0))
     dr = ImageDraw.Draw(blossom)
@@ -800,29 +844,33 @@ def horn(size, c=FLOWER):
     return blossom
 
 @reg('f')
-def roundpetal(size, c=FLOWER, petals=5, gradation=100, floret=10):
-    size = int(size*0.7)
-    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+def roundpetal(size, c=FLOWER, petals=5, gradation=100, floret=10,
+               wavy=0, cont=30):
+    R = int(size*0.9)
+    bcol =  brossom_color(c).ctoi()
     gradation = int(prevset('f', 'gradation', gradation))/100.0
     n = int(prevset('f', 'petals', petals, 3, 6))
     floret = prevset('f', 'floret', floret, 0, 50)
+    wavy = prevset('f', 'wavy', wavy, 0, 20)
+    cont = prevset('f', 'cont', cont, 0, 100)
    
     mask = Image.new('L',(size, size), 0)
     
+    psize = int(size/2.5+wavy/100*size)
     petal = Image.new('L',(size, size), 0)
-    dr = ImageDraw.Draw(petal)
-    psize = int(size/2.5)
-    dr.ellipse(((size-psize)//2,0,(size-psize)//2+psize, psize),
-               fill=255)
+    
+    petalmask = wrinkle_circle(200, Amp=wavy, Cont=20)
+    petalmask = petalmask.resize((psize,psize),resample=Image.LANCZOS)
 
+    petal.paste(petalmask, ((size-psize)//2,0), petalmask)
     angle = 360 // n
     for n in range(n):
         p = petal.rotate(n*angle, expand=False)
         mask.paste(p,(0,0),p)
 
-    W,H = mask.size
-
     dr = ImageDraw.Draw(mask)
+
+    W,H = mask.size
     cx,cy,r = W//2, H//2, psize//2
     dr.ellipse((cx-r,cy-r,cx+r,cy+r), fill=255)
 
@@ -841,14 +889,17 @@ def roundpetal(size, c=FLOWER, petals=5, gradation=100, floret=10):
     return drawfloret(base, floret)
 
 
-def drawfloret(img, floret):
+def drawfloret(img, floret, color=None):
     sr = int(img.width*floret/100)
 
     fimg = Image.new('L',(sr,sr), 0)
     dr = ImageDraw.Draw(fimg)
     dr.ellipse((0,0,sr,sr), fill=255)
 
-    scol = rated_jitter(RGBColor(240, 240, 64),20)
+    if color is None:
+        scol = rated_jitter(RGBColor(240, 240, 64),20)
+    else:
+        scol = RGBColor(color)
     dark = brightness(scol, s=1.6)
     rgb = rad_grad(sr, sr, dark, scol, rmed=0.8)
 
@@ -858,10 +909,113 @@ def drawfloret(img, floret):
     return img
    
 
+def fourie_noise(R, N, Amp, KMAX):
+    # 手書き円風 KMAXが小さい方が円に近くなる
+    theta = np.linspace(0, 2*np.pi, N, endpoint=False)
+
+    noise = np.zeros_like(theta)
+    KMAX = max(KMAX, 1)
+
+    for k in range(1, KMAX + 1):
+        phase = np.random.uniform(0, 2*np.pi)
+        noise += np.sin(k * theta + phase) / k
+
+    # noise /= np.max(np.abs(noise))
+    noise /= np.std(noise)
+    r_boundary = R + Amp * noise
+
+    return r_boundary
+
+
+def degree_noise(R, N, Amp, Smooth):
+    # 手書き円風 Smoothが大きい方が輪郭が滑らか
+    noise = np.random.randn(N)
+    for _ in range(Smooth):
+        noise = (np.roll(noise, -1)
+                 + 2 * noise
+                 + np.roll(noise, 1)
+                 ) / 4
+
+    # noise /= np.max(np.abs(noise))
+    noise /= np.std(noise)
+    r_boundary = R + Amp * noise
+
+    return r_boundary
+
+
+def wrinkle_circle(R, Amp=3, Cont=20, Detail=0.5, Power=0, Method=0):
+    """輪郭が不規則な円: 半径R → 'L'イメージを返す(BBOX=(2R,2R)にリサイズ)
+    Amp: 輪郭の凹凸の大きさ(2..R )
+    Cont: 輪郭contourの滑らかさ(fourie:KMAX=30..5,degree:Smooth=10..50)
+    Ditail: サンプル係数(0.25～1.5)
+    Power:グラデーション強度(0はフラット)
+    Method:0=角度ノイズ 1=フーリエ級数ノイズ"""
+
+    W = R*3
+    N = max(int(2 * np.pi * R * Detail),100)
+    
+    c = W / 2
+
+    # 輪郭生成
+    if Method == 0:
+        r_boundary = degree_noise(R, N, Amp, Cont)
+    else:
+        r_boundary = fourie_noise(R, N, Amp, Cont)
+
+    # メッシュ生成
+    yy, xx = np.mgrid[:W, :W]
+
+    dx = xx - c
+    dy = yy - c
+
+    dist = np.sqrt(dx * dx + dy * dy)
+    ang = np.arctan2(dy, dx)
+    idx = ((ang + np.pi) * N / (2 * np.pi)).astype(np.int32)
+    idx %= N
+
+    r = r_boundary[idx]
+    factor = dist / r
+    if Power == 0:
+        npmask = factor < 1  # グラデーションなし
+    else:
+        npmask = (1.0 - np.clip(factor, 0, 1)) ** Power
+        # Power=0.2 やや皺(推奨), 1.0 線形, 2.0 スターバースト 
+
+    # マスク生成
+    mask = Image.fromarray((npmask * 255).astype(np.uint8), 'L')
+    mask = mask.crop(mask.getbbox())
+
+    return mask.resize((R*2,R*2),resample=Image.NEAREST)
+
+
+@reg('f')
+def hibiscus(size, c=FLOWER, gradation=100, inner=0):
+    bcol =  brossom_color(c).ctoi()
+    gradation = int(prevset('f', 'gradation', gradation))/100.0
+    inner = prevset('f', 'inner', inner, 0, 90)/100
+
+    outer_p = roundpetal(size*2, c, petals=5, gradation=gradation,
+                       floret=0, wavy=15, cont=40)
+    ow,oh = outer_p.size
+    if inner > 0:
+        c2 = rgb_random_jitter(RGBColor('#D20C9C'),10).ctox()
+        inner_p = roundpetal(int(size*inner), c2, petals=5, gradation=100,
+                       floret=0, wavy=15, cont=20)
+        iw,ih = inner_p.size
+        outer_p.paste(inner_p,(int((ow-iw)/2),int((oh-ih)/2)),inner_p)
+
+    stimmen = max(size//10,5)
+    dr = ImageDraw.Draw(outer_p)
+    dr.arc((0,oh//6,(ow+stimmen)//2,oh-oh//6),start=290,end=0,width=stimmen,fill='#DDCC00')
+    
+    return outer_p
+
+
+
 @reg('f')
 def daisy(size, c=FLOWER, petals=14, gradation=100, floret=20):
     size = int(size*0.9)
-    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+    bcol =  brossom_color(c).ctoi()
     n = int(prevset('f', 'petals', petals, lo=3))
     gradation = int(prevset('f', 'gradation', gradation))/100.0
     floret = int(prevset('f', 'floret', floret, 10, 50))
@@ -899,6 +1053,12 @@ def daisy(size, c=FLOWER, petals=14, gradation=100, floret=20):
 
 
 @reg('f')
+def sunflower(size, c='#FCED5F', gradation=110, floret=70):
+    img = daisy(size*2, c=c, petals=55, gradation=gradation, floret=0)
+    return drawfloret(img, floret=floret, color='#B9900D')
+
+
+@reg('f')
 def fishmint(size, c=FLOWER, spike=65):
     """ドクダミ spike:穂状花序のsizeとの比率"""
     spike = int(prevset('f', 'spike', spike, 10)/100.0 * size)
@@ -913,7 +1073,7 @@ def fishmint(size, c=FLOWER, spike=65):
 
     # spike(穂状花序)
     dr = ImageDraw.Draw(base)
-    scol = rated_jitter(RGBColor('#e8e820'),20).ctoi()
+    scol = brossom_color('#e8e820').ctoi()
     sr = spike//2  # 花序弧半径(≒花序長さ)
     sx = bc-sr
     #sy = bc
@@ -929,7 +1089,7 @@ def fishmint(size, c=FLOWER, spike=65):
 
 @reg('f')
 def pointedpetal(size, c=FLOWER, petals=5, weight=1.7, stimen=2):
-    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+    bcol =  brossom_color(c).ctoi()
     n = prevset('f', 'petals', petals, lo=3)
     weight = prevset('f', 'weight', weight, 1E-6, 2.0)
     stimen = prevset('f', 'stimen', stimen, 2, 5)
@@ -976,6 +1136,8 @@ def pointedpetal(size, c=FLOWER, petals=5, weight=1.7, stimen=2):
 
 
 def drawstimmen(base, bcol, num):
+    if num < 1:
+        return base
     st = Image.new('RGBA', base.size, (0,0,0,0))
     drw = ImageDraw.Draw(st)
     cx = base.width//2
@@ -994,7 +1156,7 @@ def drawstimmen(base, bcol, num):
 @reg('f')
 def leaves(size, c=FLOWER, cluster=3):
     cluster = prevset('s', 'cluster', cluster, 1, 3)
-    bcol =  rated_jitter(RGBColor(c),10).ctoi()
+    bcol =  brossom_color(c).ctoi()
 
     leaf = leafmask(size)
     leaf = leaf.convert('L').point(lambda v: 255 if v > 0 else 0)
@@ -1207,21 +1369,24 @@ def covering(p: Param, T=5):
     """
     ow,oh = p.width, p.height
     lsize = p.pwidth
-    step = lsize//2
     color = p.color1
     flower = p.color3
     J = p.color_jitter
     S = p.sub_jitter
     D = p.pheight / 100
     flw = min(p.sub_jitter2,100)
+    top_flower = False
+    in_order = True
 
     mask_name = ivy_preserv['shape']
     flower_name = ivy_preserv['flower']
     grid_name = ivy_preserv['grid']
- 
-    W,H = ow+step*4, oh+step*4
-    img = Image.new('RGBA', (W,H), (0,0,0,0))
 
+    if mask_name in IN_ORDER or flower_name in TOP_FLOWER:
+        in_order = False
+    if flower_name in TOP_FLOWER or mask_name in TOP_FLOWER:
+        top_flower = True
+ 
     lmask = SFN[mask_name](lsize*2, color.ctoi())
     fmask = FFN[flower_name](lsize, flower.ctoi())
    
@@ -1233,18 +1398,41 @@ def covering(p: Param, T=5):
         mask = lmask.convert('L').point(lambda v: 255 if v > 0 else 0)
 
     mask = mask.crop(mask.getbbox())
-    mask = mask.resize((lsize,lsize), resample=Image.BILINEAR)
+    mask = ImageOps.pad(mask,(lsize,lsize), method=Image.BICUBIC)
+    strip_h = max(mask.height, fmask.height)
+    cell_w = max(mask.width, fmask.width)+2*T
+
+    step = strip_h//2
+    xstep = cell_w//2
+    
+    W,H = ow+step*4, oh+step*4
+    img = Image.new('RGBA', (W,H), (0,0,0,0))
     grid = PFN[grid_name](W, H)
 
-    for y in range(H-1,0,-int(step*D)):
-        line = Image.new('RGBA',(W,step*3),(0,0,0,0))
+    # checkmask(lmask, mask) ####
+
+    if in_order:
+        starty, endy = H-1, 0
+        stepy = -int(step*D)
+    else:
+        starty, endy = 0, H-1
+        stepy = int(step*D)
+
+    if top_flower:
+        flw_pos = []
+
+    for y in range(starty,endy,stepy):
+        line = Image.new('RGBA',(W,strip_h+2*T),(0,0,0,0))
        
-        for x in range(0, W-1, int(step*D)):
+        for x in range(0, W-1, int(xstep*D)):
             if grid[y,x] == False:
                 continue
 
             if random.randint(0,100) < flw:
-                emask = fmask.rotate(dlt(S), resample=Image.BICUBIC,
+                if top_flower:
+                    flw_pos.append([x,y])
+                    continue
+                emask = fmask.rotate(dlt(S), resample=Image.NEAREST,
                                      expand=True)
                 line.paste(emask,(x+dlt(T), dlt(T)),emask)
             else:
@@ -1258,6 +1446,14 @@ def covering(p: Param, T=5):
                     line.paste(colr,(x+dlt(T), dlt(T)),emask)
 
         img.paste(line, (step//2,y-step//2), line)
+
+    if top_flower:
+        flw_pos.reverse()
+        for x,y in flw_pos:
+            emask = fmask.rotate(dlt(S), resample=Image.NEAREST,
+                                     expand=True)
+            img.paste(emask,(x, y),emask)
+            
     return img.crop((step,step,ow+step,oh+step))
 
 
@@ -1379,6 +1575,9 @@ def generate(p: Param):
 
     if ivy_preserv['grid'] is None:
         ivy_preserv['grid'] = ivy_preserv['grids'][0]
+    if ivy_preserv['flower_jitter'] is None:
+        ivy_preserv['flower_jitter'] = p.color_jitter
+
 
     W, H = p.width, p.height
    
@@ -1398,6 +1597,16 @@ def generate(p: Param):
 
     return bg
 
+
+def checkmask(img, img2):
+    W = img.width + img2.width + 10
+    H = max(img.height, img2.height)
+    im = Image.new('RGBA', (W,H), '#44006600')
+    im.paste(img, (0,0), img)
+    im.paste(img2, (img.width+10, 0), img2)
+    im.show()
+
+    
 # ==========
 # TEST
 # ==========
