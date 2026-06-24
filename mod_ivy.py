@@ -1,11 +1,12 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 import inspect
+import threading
+import queue
 from wall_common import *
 import TkEasyGUI as sg
 
-"""mod_ivy  壁に蔦  被覆形状=grid を変えられるように
-                    葉の形状=maskも何通りか"""
+"""mod_ivy  壁に蔦"""
 
 # ==========
 WIDTH = 1920
@@ -22,7 +23,7 @@ ROT = 45  # 角度ゆらぎ
 FLOWER_P = 0  # 花の割合
 
 LEAFSIZE = 43  # 葉の基本サイズ
-LEAFDIST = 130  # 間隔 (100で1/2幅オーバーラップ)
+LEAFDIST = 95  # 間隔 (100で1/2幅オーバーラップ)
 BRICKSIZE = 71  # 背景ブロック短辺
 BRICKPROP = 2  # 背景ブロックの縦横比
 
@@ -50,11 +51,11 @@ RECOMMEND = [['all', None, None],
              ['dokudami', ['heart'], ['fishmint']],
              ['oshiroibana', ['heart', 'single'], ['roundpetal', 'pointedpetal']],
              ['kinshibai', ['branch'], ['roundpetal', 'sunflower']],
-             ['hibiscus', ['single'], ['hibiscus']],
+             ['hibiscus', ['holly'], ['hibiscus']],
              ]
 
 IN_ORDER = ['wobblyrect']
-TOP_FLOWER = ['hibiscus', 'sunflower', 'branch']
+TOP_FLOWER = ['horn', 'hibiscus', 'sunflower', 'branch']
 
 # =========================
 # 形状登録デコレータ
@@ -410,11 +411,42 @@ def desc_(p: Param, slo, flo, glo, rec):
         p.sub_jitter2 = ivy_preserv['basep']['fnum']
 
         #print(ivy_preserv)
-        return generate(p)
+        return progresswindow(p)
     elif ev == '-recommend-':
         return va['-recommend-']
     else:
         return
+
+# 生成に時間がかかるので非同期待ちを挟む
+
+result_q = queue.Queue()
+
+def long_task(p):
+    image = generate(p)
+    result_q.put(image)
+
+def progresswindow(p):
+    progress = sg.Window('', [[sg.Text('Wait...', text_align='center',
+                                       size=(20,10),
+                                       background_color='#f0e070')]],
+                         modal=True, no_titlebar=True, grab_anywhere=True,
+                         padding_x=5, padding_y=10,
+                         element_justification='c', finalize=True)
+    
+    threading.Thread(
+        target=long_task,
+        args=(p,),
+        daemon=True).start()
+    while True:
+        pev, pva = progress.read(timeout=50)
+        if pev is None:
+            image = None
+            break
+        elif  not result_q.empty():
+            image = result_q.get()
+            break
+    progress.close()
+    return image
 
 
 # =========================
@@ -585,8 +617,10 @@ def ivy(size, c=COLOR1):
     dx = left[1][0].size[0] // 4
     dr.ellipse((cw-dx,-dx//3,cw+dx,dx//3),fill=(0,0,0,0))
 
-    base = base.crop(base.getbbox())
-    base = base.resize((size,size),resample=Image.LANCZOS)
+    ns = int(size*0.9)
+    base = ImageOps.fit(base, (ns,ns), method=Image.LANCZOS)
+    #base = base.crop(base.getbbox())
+    #base = base.resize((size,size),resample=Image.LANCZOS)
     return base
 
 
@@ -670,12 +704,12 @@ def asagao(size, c=COLOR1, cluster=2):
     leaf_s = leaf_s.rotate(45,resample=Image.NEAREST,expand=True)
     sx,sy = leaf_s.size
 
-    leaf_s = leaf_s.resize((int(leaf_s.width*0.75),leaf_s.height),
+    leaf_s = leaf_s.resize((int(leaf_s.width*0.75),int(leaf_s.width*0.85)),
                            resample=Image.NEAREST)
     sx,sy = leaf_s.size
     cut = sy/3
 
-    subleaf = leaf_s.resize((int(sx//1.8),int(sy//2.3)), resample=Image.NEAREST)
+    subleaf = leaf_s.resize((int(sx//2.1),int(sy//2.0)), resample=Image.NEAREST)
     subleaf = subleaf.rotate(-55,resample=Image.NEAREST,expand=True)
     subleaf = subleaf.crop(subleaf.getbbox())
     ssx,ssy = subleaf.size
@@ -698,22 +732,23 @@ def asagao(size, c=COLOR1, cluster=2):
     base = base.crop(base.getbbox())
     base = base.rotate(-35, resample=Image.BICUBIC, expand=True)
 
-    #base.show()
     bx,by = base.size
     b2 = [base.copy(), ImageOps.mirror(base)]
+
+    # checkmask(base, subleaf)
 
     clus = Image.new('RGBA', (int(bx*2)+1,int(by*(cluster+1))+1), (0,0,0,0))
     dr = ImageDraw.Draw(clus)
     for i in range(cluster):
         dx = int(bx * (i%2) / 2)
-        dy = int(by * i / 2)
+        dy = int(by * i / 2.2)
        
         clus.paste(b2[i%2],(dx,dy),b2[i%2])
 
     clus = clus.crop(clus.getbbox())
-    r = size/max(clus.width, clus.height)
-    clus = clus.resize((int(clus.width*r),int(clus.height*r)),
-                       resample=Image.LANCZOS)
+    #r = size/max(clus.width, clus.height)
+    #clus = clus.resize((int(clus.width*r),int(clus.height*r)),
+    #                   resample=Image.LANCZOS)
 
     return clus
 
@@ -755,7 +790,7 @@ def branch(size, c=COLOR1, length=3, step=15, phase=0.0, scale=1.0):
     scale = prevset('s', 'scale', scale, 0.2, 2.0)
     color = to_rgb(c)
     
-    stem = int(size*scale/40)
+    stem = max(int(size*scale/30),3)
     lf = leaf(int(size*scale))
     lx = lf.width
     bl = int(((length+1)*step+lx)*scale*4)
@@ -768,21 +803,24 @@ def branch(size, c=COLOR1, length=3, step=15, phase=0.0, scale=1.0):
         base.paste(lf, (p2-lx, p2), lf)
         
     el = lf.rotate(85, resample=Image.NEAREST, expand=False)
-    base.paste(el,(0,0),el)
-    bx,by = base.size
+    base.paste(el,(5,5),el)
+    base = base.crop(base.getbbox())
     dr = ImageDraw.Draw(base)
     dr.line((*el.size, p2, p2), width=stem, fill=color)
-
-    #print(bx,by)
-    #checkmask(base, lf)
     
-    base_n = base.rotate(dlt(8)+37, resample=Image.BICUBIC, expand=True)
-    base_n = base_n.resize((int(bx*0.8),int(by*0.8)),resample=Image.NEAREST)
-    nx, ny = base_n.size
-
-    base.paste(base_n,((bx-nx)//2,(by-ny)//2),base_n)
-    base.rotate(-5, resample=Image.BICUBIC)
-    base = base.crop(base.getbbox())
+    bx,by = base.size
+    image = Image.new('RGBA', (bx,by),(0,0,0,0))
+    base_s = base.rotate(dlt(8)+37, resample=Image.BICUBIC, expand=True)
+    base_s = base_s.resize((int(bx*0.8),int(by*0.8)),resample=Image.NEAREST)
+    sx, sy = base_s.size
+    image.paste(base_s,((bx-sx)//2,by-sy),base_s)
+    image.paste(base,(0,0),base)
+    
+    image = image.rotate(-30, resample=Image.BICUBIC, expand=True)
+    image = image.resize((image.width//5, image.height//5),
+                         resample=Image.LANCZOS)
+    image = image.crop(image.getbbox())
+    #checkmask(base, image)
 
     return base
 
@@ -1006,7 +1044,10 @@ def hibiscus(size, c=FLOWER, gradation=100, inner=0):
 
     stimmen = max(size//10,5)
     dr = ImageDraw.Draw(outer_p)
-    dr.arc((0,oh//6,(ow+stimmen)//2,oh-oh//6),start=290,end=0,width=stimmen,fill='#DDCC00')
+    dr.arc((0,oh//6,(ow+stimmen)//2,oh-oh//6),start=290,end=0,
+           width=stimmen, fill='#DDCC00')
+    dr.arc((0,oh//6,(ow+stimmen)//2,oh-oh//6),start=290,end=320,
+           width=int(stimmen*1.5), fill='#EECC00')
     
     return outer_p
 
@@ -1018,7 +1059,7 @@ def daisy(size, c=FLOWER, petals=14, gradation=100, floret=20):
     bcol =  brossom_color(c).ctoi()
     n = int(prevset('f', 'petals', petals, lo=3))
     gradation = int(prevset('f', 'gradation', gradation))/100.0
-    floret = int(prevset('f', 'floret', floret, 10, 50))
+    floret = int(prevset('f', 'floret', floret))
    
     r = np.pi*size/(3.4*n)  # 花弁先端の円弧半径 (2πr/n)/2 = 2*π*size/2/n/2
     xc = size // 2
@@ -1053,8 +1094,11 @@ def daisy(size, c=FLOWER, petals=14, gradation=100, floret=20):
 
 
 @reg('f')
-def sunflower(size, c='#FCED5F', gradation=110, floret=70):
-    img = daisy(size*2, c=c, petals=55, gradation=gradation, floret=0)
+def sunflower(size, c='#FCED5F', petals=34, gradation=110, floret=70):
+    petals = prevset('f', 'petals', petals, 34)
+    gradation = prevset('f', 'gradation', gradation)
+    floret = int(prevset('f', 'floret', floret, 50))
+    img = daisy(size*2, c=c, petals=petals, gradation=gradation, floret=0)
     return drawfloret(img, floret=floret, color='#B9900D')
 
 
@@ -1382,10 +1426,10 @@ def covering(p: Param, T=5):
     flower_name = ivy_preserv['flower']
     grid_name = ivy_preserv['grid']
 
-    if mask_name in IN_ORDER or flower_name in TOP_FLOWER:
-        in_order = False
     if flower_name in TOP_FLOWER or mask_name in TOP_FLOWER:
         top_flower = True
+    if grid_name in IN_ORDER:
+        in_order = False
  
     lmask = SFN[mask_name](lsize*2, color.ctoi())
     fmask = FFN[flower_name](lsize, flower.ctoi())
@@ -1398,11 +1442,12 @@ def covering(p: Param, T=5):
         mask = lmask.convert('L').point(lambda v: 255 if v > 0 else 0)
 
     mask = mask.crop(mask.getbbox())
-    mask = ImageOps.pad(mask,(lsize,lsize), method=Image.BICUBIC)
+    mask = ImageOps.pad(mask, (mask.width//2, mask.height//2),
+                        method=Image.BICUBIC)
     strip_h = max(mask.height, fmask.height)
     cell_w = max(mask.width, fmask.width)+2*T
 
-    step = strip_h//2
+    step = int(lsize/1.7)
     xstep = cell_w//2
     
     W,H = ow+step*4, oh+step*4
@@ -1450,6 +1495,7 @@ def covering(p: Param, T=5):
     if top_flower:
         flw_pos.reverse()
         for x,y in flw_pos:
+            fmask = FFN[flower_name](lsize, flower.ctoi())
             emask = fmask.rotate(dlt(S), resample=Image.NEAREST,
                                      expand=True)
             img.paste(emask,(x, y),emask)
