@@ -1,8 +1,9 @@
 import re
 import copy
 import os.path as pa
+import math
 import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance
+from PIL import Image, ImageDraw, ImageEnhance, ImageTk
 import TkEasyGUI as sg
 from wall_common import *
 from filedialog import *
@@ -35,6 +36,7 @@ BRIGHTNESS = 100
 SATURATION = 100
 PERIOD = 6
 DUTY = 50
+ANGLE = 0
 
 # 内部定数
 DATA_DIR = 'samples'
@@ -49,6 +51,7 @@ BASIC_COLOR = [(20, 60, 40),     # 0 緑
                ]
 
 tartan_preserv = {
+    'palette': [*BASIC_COLOR, SPECIAL_COLOR1, SPECIAL_COLOR2, SPECIAL_COLOR3],
     'pattern': [(0,200),(7,5),(0,200),(5,10),(0,20),
                 (1,25),(0,10),(1,25),(0,20),(5,10)]  # 初期柄
 }
@@ -58,7 +61,8 @@ def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, 'タータンチェック風(＋セットエディタ)',
                        {'color1':'特色1', 'color2':'特色2', 'color3':'特色3',
                         'color_jitter':'明るさ(%)', 'sub_jitter':'彩度(%)',
-                        'pwidth':'織目数', 'pheight':'DUTY比(%)'})
+                        'pwidth':'織目数', 'pheight':'DUTY比(%)',
+                        'pdepth':'角度'})
     return module_name
 
 # おすすめパラメータ
@@ -70,76 +74,12 @@ def default_param(p: Param):
     p.sub_jitter = SATURATION
     p.pwidth = PERIOD
     p.pheight = DUTY
+    p.depth = ANGLE
     return p
 
-# ----
-# セットエディタ
-# ----
-def layout():
-    preview = sg.Image(key='-test-', size=(360,360))
-    macros = [[sg.Button('Flip&Paste', key='-t_flp-', text_color='#ffffff',
-                        background_color='#013070', expand_x=True),
-               ],
-              [sg.Button('2X', key='-t_dbl-', size=(3,1), text_color='#ffffff',
-                        background_color='#013070', expand_x=True),
-               sg.Button('1/2', key='-t_hlf-', size=(3,1), text_color='#ffffff',
-                        background_color='#013070', expand_x=True),
-               ],
-              ]
-    palette = [[sg.Text('Pallet'),
-                sg.Image(key='-pallet-', size=(136,56), enable_events=True),
-                #sg.Image(size=(2,80), enable_events=True),
-                ],
-               ]
-              
-    right = [[sg.Multiline('', key='-t_pat-',size=(20,12),
-                           background_color='#f0eea0', text_align='left',
-                           expand_x=True, expand_y=True)
-              ],
-             [sg.Button('Delete Line', key='-t_del-', text_color='#ffffff',
-                        background_color='#601001'),
-              sg.Text('', expand_x=True),
-              sg.Button('Clear', key='-t_clr-', text_color='#ffffff',
-                        background_color='#601001'),
-              sg.Button('Read&CleanUp', key='-t_rwt-', text_color='#ffffff',
-                        background_color='#707001'),
-              ],
-             [sg.Column(palette, vertical_alignment='top',
-                        expand_x=True),
-              sg.Column(macros, vertical_alignment='top',
-                        expand_x=True),
-              ],
-             [sg.Button('Add Line', key='-t_add-', text_color='#ffffff',
-                        background_color='#106001'),
-              sg.Text('C:',text_align='right', size=(4,1)),
-              sg.Text('', key='-t_col-', size=(2,1)),
-              sg.Text('', key='-t_ctp-', size=(10,1)),
-              sg.Text(' W:'),
-              sg.Input('', key='-t_wth-', size=(4,1),
-                       background_color='#f0eea0'),
-              ],
-             ]
-    
-    buttons = [sg.Text('File'),
-               sg.Combo([], key='-t_file-',
-                        readonly=True, expand_x=True),
-               sg.Button('Load', key='-t_ld-'),
-               sg.Button('Save', key='-t_sv-'),
-               #sg.Text('', size=(2,1)),
-               sg.Text('', size=(2,1), expand_x=True),
-               sg.Button('Cancel', key='-t_can-', background_color='#ffdddd'),
-               sg.Button('Apply', key='-t_ok-', background_color='#ddffdd'),
-               ]
-
-    return [[sg.Text('Tartan set editor:'),
-             sg.Text(expand_x=True),
-             sg.Text('# press "CleanUp" after direct edit.'),
-             ],
-            [preview, sg.Frame('', layout=right, relief='ridge',
-                            pad=(2,4), expand_x=True, expand_y=True)],
-            buttons]
-
-
+# ----------
+# ファイル入出力
+# ----------
 # ttnファイルリスト
 def ttnfile_list(directory=DATA_DIR):
     patn = directory+pa.sep+'*.ttn'
@@ -156,19 +96,6 @@ def search_file(filename, directory=DATA_DIR):
     else:
         return None
 
-
-# パレット画像の生成
-def palimg(cset):
-    # print(cset)
-    img = Image.new('RGB', (137,57), '#e0e0e0')
-    drw = ImageDraw.Draw(img)
-    for i in range(5):
-        drw.rectangle((i*27+5,5,i*27+25, 25), fill=cset[i])
-        drw.rectangle((i*27+4,3,i*27+27, 27), outline='#000000', width=2)
-        drw.rectangle((i*27+5,32,i*27+25, 52),fill=cset[i+5])
-        drw.rectangle((i*27+3,30,i*27+27, 54), outline='#000000', width=2)
-    return img
-    
 
 # セットパターンのテキスト化
 def pattxt(pattern):
@@ -240,13 +167,6 @@ def read_pattern_section(buf, lno):
     return pat, lno
 
 
-def pattern_resize(pat, sc):
-    for p in range(len(pat)):
-        c,w = pat[p]
-        pat[p] = (c, min(max(1,int(w*sc)),3840))
-    return pat
-        
-
 def load_pattern(fname):
     '''fnameからセットパターン及び利用色情報を読み込み、text, csetを返す'''
     fname = DATA_DIR+pa.sep+fname
@@ -303,29 +223,116 @@ def strtotuple(s):
         return tuple(int(x) for x in s.strip('()').split(','))
 
 
+# ----
+# セットエディタ
+# ----
+def layout():
+    preview = sg.Image(key='-test-', size=(360,360))
+    macros = [[sg.Button('Flip&Paste', key='-t_flp-', text_color='#ffffff',
+                        background_color='#013070', expand_x=True),
+               ],
+              [sg.Button('2X', key='-t_dbl-', size=(3,1), text_color='#ffffff',
+                        background_color='#013070', expand_x=True),
+               sg.Button('1/2', key='-t_hlf-', size=(3,1), text_color='#ffffff',
+                        background_color='#013070', expand_x=True),
+               ],
+              ]
+    palette = [[sg.Text('Pallet'),
+                sg.Canvas(key='-pallet-', size=(136,56),
+                          background_color='white'),
+                #sg.Image(key='-pallet-', size=(136,56), enable_events=True),
+                ],
+               ]
+              
+    right = [[sg.Multiline('', key='-t_pat-',size=(20,12),
+                           background_color='#f0eea0', text_align='left',
+                           expand_x=True, expand_y=True)
+              ],
+             [sg.Button('Delete Line', key='-t_del-', text_color='#ffffff',
+                        background_color='#601001'),
+              sg.Text('', expand_x=True),
+              sg.Button('Clear', key='-t_clr-', text_color='#ffffff',
+                        background_color='#601001'),
+              sg.Button('Read&CleanUp', key='-t_rwt-', text_color='#ffffff',
+                        background_color='#707001'),
+              ],
+             [sg.Column(palette, vertical_alignment='top',
+                        expand_x=True),
+              sg.Column(macros, vertical_alignment='top',
+                        expand_x=True),
+              ],
+             [sg.Text('C:',text_align='right', size=(4,1)),
+              sg.Text('', key='-t_col-', size=(2,1)),
+              sg.Text('', key='-t_ctp-', size=(10,1)),
+              sg.Text(' W:'),
+              sg.Input('', key='-t_wth-', size=(4,1),
+                       background_color='#f0eea0'),
+              sg.Button('Add Line', key='-t_add-', text_color='#ffffff',
+                        background_color='#106001'),
+              ],
+             ]
+    
+    buttons = [sg.Text('File'),
+               sg.Combo([], key='-t_file-',
+                        readonly=True, expand_x=True),
+               sg.Button('Load', key='-t_ld-'),
+               sg.Button('Save', key='-t_sv-'),
+               #sg.Text('', size=(2,1)),
+               sg.Text('Period', size=(5,1)),
+               sg.Input(key='-t_period-', size=(3,1), enable_events=True),
+               sg.Text('', size=(2,1), expand_x=True),
+               sg.Button('Cancel', key='-t_can-', background_color='#ffdddd'),
+               sg.Button('Apply', key='-t_ok-', background_color='#ddffdd'),
+               ]
+
+    return [[sg.Text('Tartan set editor:'),
+             sg.Text(expand_x=True),
+             sg.Text('# press "CleanUp" after direct edit.'),
+             ],
+            [preview, sg.Frame('', layout=right, relief='ridge',
+                            pad=(2,4), expand_x=True, expand_y=True)],
+            buttons]
+
+
+Canvas_data = {'x': 0, 'y': 0,
+               'method': None}
+
 def desc(p: Param):
+
     wn = sg.Window('Tartan-Set Editor', layout=layout(),
-                   resizable=True)  # , modal=True)
+                   resizable=True, finalize=True)  # , modal=True)
+
+    def on_click(event, method=None):
+        Canvas_data['x'], Canvas_data['y'] = event.x, event.y
+        Canvas_data['method'] = method
+        # 仮想イベント "-palette-" を発生させる
+        wn.post_event('-pallet-', {'event_type': method})
+    
+    canvas_elem = wn['-pallet-']
+    tk_canvas = canvas_elem.Widget
+    tk_canvas.bind("<Button-1>", lambda e: on_click(e, method='sel'))
+    tk_canvas.bind("<Button-3>", lambda e: on_click(e,  method='edit'))
+    # ダブルクリックはシングルクリックと判別する処理が必要なので非対象に
+    # tk_canvas.bind("<Double-Button-1>", lambda e: on_click(e, method='edit'))
 
     # 色セットの読み込み
-    cset = copy.copy(BASIC_COLOR)
-    cset.append(p.color1.ctoi())
-    cset.append(p.color2.ctoi())
-    cset.append(p.color3.ctoi())
+    cset = copy.copy(tartan_preserv['palette'])
     img = palimg(cset)
-    wn['-pallet-'].update(data=img)
+    set_palette_image(tk_canvas, img)
+
 
     # 仮セットパターンの読み込み
     pat = copy.copy(tartan_preserv['pattern'])
     text, patw = pattxt(pat)
     wn['-t_pat-'].update(text=text)
+    wn['-t_period-'].update(p.pwidth)
 
     # 本体用パラメータの保存(特色も)
     org_w, org_h = p.width, p.height
-    org_color = []
-    for i in range(3):
-        org_color.append(getattr(p, f'color{i+1}'))
+    org_period = p.pwidth
+    org_angle = p.pdepth
     p.width, p.height = patw, patw
+    p.pdepth = 0
 
     current = search_file(p.savefile + '.ttn')
     wn['-t_file-'].update('' if current is None else p.savefile)
@@ -338,36 +345,47 @@ def desc(p: Param):
 
     while True:
         ev, va = wn.read()
+        #print(ev, va)
 
         if ev == sg.WINDOW_CLOSED or ev == '-t_can-':  # キャンセル
             break
         if ev == '-t_ok-':  # 反映して終了
-            if len(pat) > 0:
-                for i in range(3):
-                    if cset[i+7] != getattr(p, f'color{i+1}'):
-                        setattr(p, f'color{i+1}', RGBColor(cset[i+7]))
+            p.pwidth = max(safeint(va['-t_period-'],p.pwidth),1)
             break
-        elif ev == '-pallet-' and va['event_type'] == 'mousedown':  # 色指定
-            x, y = get_pos(str(va['event']))
+        elif ev == '-pallet-':  # 色指定
+            x, y = Canvas_data['x'], Canvas_data['y']
             xx = (x-7) % 27
-            if 0<= xx <= 20:
+            yy = (y-5) % 27
+            if 0<= xx <= 20 and 0<= yy <= 20:
                 x = (x-7) // 27 if (x-7) // 27 < 5 else 4
-                yy = (y-5) % 27
-                if 0<= yy <= 20:
-                    y = 5 if y>31 else 0
-                    c = y + x
-                    # print(va['event'],x, y, c)
-                    # 色名表示部分には背景色をつける
-                    fg, bg = bg_and_font(cset[c])
-                    wn['-t_col-'].update(str(c),
-                                         text_color=fg, background_color=bg)
-                    wn['-t_ctp-'].update(f'({cset[c][0]},{cset[c][1]},{cset[c][2]})')
-            continue
+                y = 5 if y>31 else 0
+                c = y + x
+            else:
+                continue
+            if Canvas_data['method'] == 'sel':
+                # 色名表示部分には背景色をつける
+                fg, bg = bg_and_font(cset[c])
+                wn['-t_col-'].update(str(c),
+                                     text_color=fg, background_color=bg)
+                wn['-t_ctp-'].update(
+                    f'({cset[c][0]},{cset[c][1]},{cset[c][2]})')
+                continue
+            elif Canvas_data['method'] == 'edit':
+                color = sg.popup_color(default_color=cset[c])
+                wnflush(wn)
+                cset[c] = to_rgb(color)
+                img = palimg(cset)
+                set_palette_image(tk_canvas, img)
+            else:
+                print(f'Color#={c},',
+                      f' x,y={Canvas_data["x"]},{Canvas_data["y"]}',
+                      f' method=,{Canvas_data["method"]}')
+                continue
         elif ev == '-t_add-':  # 色・幅をセットに追加
             if wn['-t_col-'].get() == '' or wn['-t_wth-'].get() == '':
                 continue
-            col = int(wn['-t_col-'].get())
-            w = int(wn['-t_wth-'].get())
+            col = min(max(safeint(wn['-t_col-'].get()),0),9)
+            w = max(safeint(wn['-t_wth-'].get(),0),1)
             pat.append((c,w))
         elif ev == '-t_del-':  # 最終行を削除
             if len(pat) > 0:
@@ -387,7 +405,7 @@ def desc(p: Param):
                 # print(pat, cset)
                 if cset != old_cset:
                     pimg = palimg(cset)
-                    wn['-pallet-'].update(data=pimg)
+                    set_palette_image(tk_canvas, pimg)
                     
                 p.savefile = pa.splitext(fname)[0]
         elif ev == '-t_sv-':  # 保存
@@ -398,7 +416,7 @@ def desc(p: Param):
             oldf = current+'.ttn'
             fname = get_savefile(oldf, filetypes=[('Tartan set','*.ttn'),],
                                  init_dir=DATA_DIR)
-            frush_ev(wn)
+            wnflush(wn)
             if fname != '' and fname is not None:
                 save_pattern(fname, pat, cset)
                 fname = pa.splitext(pa.basename(fname))[0]
@@ -449,6 +467,9 @@ def desc(p: Param):
             else:
                 #print('No Sel:',ml.tag_ranges("sel"))
                 continue
+        elif ev == '-t_period-' and va['event_type'] == 'return':
+            p.pwidth = max(safeint(va['-t_period-'], p.pwidth),1)
+            wn['-t_period-'].update(f'{p.pwidth}')
         else:
             continue
         
@@ -458,38 +479,99 @@ def desc(p: Param):
         p.width, p.height = patw, patw
         for i in range(3):
             setattr(p, f'color{i+1}', RGBColor(cset[7+i]))
-        img = generate(p, pattern=pat)
+        img = generate(p, pattern=pat, cset=cset)
         wn['-test-'].update(data=img)
 
     wn.close()
     p.width, p.height = org_w, org_h
-    # 一旦元のcolor1～3に書き戻し
-    for i in range(3):
-        setattr(p, f'color{i+1}', org_color[i])
-    if len(pat) == 0 or pat == tartan_preserv['pattern']:
+    p.pdepth = org_angle
+    if ((len(pat) == 0 or pat == tartan_preserv['pattern'])
+        and cset == tartan_preserv['palette']
+        and p.pwidth == org_period):
         # セットの変更なし or 仮セットが空(実質キャンセル)
+        p.pwidth = org_period
         return
     else:
         # セットの変更があった場合
         # 変更された可能性があるのでcolor1～3を更新
         for i in range(3):
             setattr(p, f'color{i+1}', RGBColor(cset[7+i]))
+        tartan_preserv['palette'] = cset.copy()
         tartan_preserv['pattern'] = pat
         return generate(p)
+
+
+# パレット画像の生成
+def pattern_resize(pat, sc):
+    for p in range(len(pat)):
+        c,w = pat[p]
+        pat[p] = (c, min(max(1,int(w*sc)),3840))
+    return pat
+        
+
+# パレット画像の生成
+def palimg(cset):
+    # print(cset)
+    img = Image.new('RGB', (137,57), '#e0e0e0')
+    drw = ImageDraw.Draw(img)
+    for i in range(5):
+        drw.rectangle((i*27+5,5,i*27+25, 25), fill=cset[i])
+        drw.rectangle((i*27+4,3,i*27+27, 27), outline='#000000', width=2)
+        drw.rectangle((i*27+5,32,i*27+25, 52),fill=cset[i+5])
+        drw.rectangle((i*27+3,30,i*27+27, 54), outline='#000000', width=2)
+    return img
+    
+
+# パレット画像の表示
+def set_palette_image(tk_canvas, img):
+    photo_image = ImageTk.PhotoImage(img)
+    tk_canvas.image = photo_image
+    tk_canvas.create_image(img.width, img.height,
+                           image=photo_image, anchor="se")
+    
+# 入力文字列をintに
+def safeint(str, default=0):
+    try:
+        v = int(str)
+    except ValueError:
+        v = default
+    
+    return v
+
+
+# cueクリア
+def wnflush(wn, to=0):
+    while True:
+        ev,__ = wn.read(timeout=to)
+        if to != 0:
+            print(ev)
+        if ev == sg.TIMEOUT_KEY:
+            break
+    return
 
 
 # ----
 # 生成
 # ----
-def generate(p: Param, pattern=None):
+def generate(p: Param, pattern=None, cset=None):
     width, height = p.width, p.height
-    cset = copy.copy(BASIC_COLOR)
-    cset.append(p.color1.ctoi())
-    cset.append(p.color2.ctoi())
-    cset.append(p.color3.ctoi())
+    owidth, oheight = width, height
+    angle = p.pdepth
+    if angle != 0:
+        diagonal = int(math.ceil(math.sqrt(width**2 + height**2)))
+        print(diagonal)
+        width, height = diagonal, diagonal 
+
+    if cset is None:
+        cset = (tartan_preserv['palette']+[(0,0,0)]*10)[:10]
+        for i in range(3):
+            cset[7+i] = getattr(p, f'color{i+1}').ctoi()
+    else:
+        cset = (cset+[(0,0,0)]*10)[:10]
     color=[]
     for i in range(10):
         color.append(np.array(list(cset[i])))
+
 
     brightness = max(0.0, p.color_jitter / 100.0)
     saturation = max(0.0, p.sub_jitter / 100.0)
@@ -522,22 +604,28 @@ def generate(p: Param, pattern=None):
     horizontal_stripes = base_pattern[y_idx][:, np.newaxis, :] # (height, 1, 3)
     vertical_stripes = base_pattern[x_idx][np.newaxis, :, :]   # (1, width, 3)
     
-    # 「綾織り」ロジックの適用
-    # (x + y) % 4 のような計算で、斜めに縦糸・横糸を入れ替える
-    # 2x2 や 4x4 の周期で切り替えると布らしくなります
-    # weave_mask が True なら縦糸、False なら横糸を表示
+    # 綾織り
+    #  (x + y) % 4 のような計算で、斜めに縦糸・横糸を入れ替える
+    #  2x2 や 4x4 の周期で切り替えると布らしくなる
+    #  weave_mask が True なら縦糸、False なら横糸を表示
     yy, xx = np.indices((height, width))
     weave_mask = ((xx + yy) % period < delta)
     weave_mask = weave_mask[:, :, np.newaxis] # ブロードキャスト用
 
     # マスクに基づいて色を選択
-    tartan_data = np.where(weave_mask, vertical_stripes, horizontal_stripes).astype(np.uint8)
+    tartan_data = np.where(weave_mask, vertical_stripes,
+                           horizontal_stripes).astype(np.uint8)
 
     # 糸の重なりを強調するためにわずかに明るさを変える
     shade = ((xx + yy) % 2 * 10).astype(np.int16)
-    tartan_data = np.clip(tartan_data.astype(np.int16) - shade[:, :, np.newaxis], 0, 255).astype(np.uint8)
+    tartan_data = np.clip(tartan_data.astype(np.int16) -
+                          shade[:, :, np.newaxis], 0, 255).astype(np.uint8)
 
     image = Image.fromarray(tartan_data)
+    if angle != 0:
+        image = image.rotate(angle, resample=Image.BICUBIC, expand=False)
+        image = image.crop(((width-owidth)//2,(height-oheight)//2,
+                            (width+owidth)//2,(height+oheight)//2))
 
     image = ImageEnhance.Color(image).enhance(saturation)
     image = ImageEnhance.Brightness(image).enhance(brightness)

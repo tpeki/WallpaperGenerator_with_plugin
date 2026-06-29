@@ -54,7 +54,7 @@ RECOMMEND = [['all', None, None],
              ['hibiscus', ['holly'], ['hibiscus']],
              ]
 
-IN_ORDER = ['wobblyrect']
+REVERSE_ORDER = ['branch', 'holly']
 TOP_FLOWER = ['horn', 'hibiscus', 'sunflower', 'branch']
 
 # =========================
@@ -1428,7 +1428,7 @@ def covering(p: Param, T=5):
 
     if flower_name in TOP_FLOWER or mask_name in TOP_FLOWER:
         top_flower = True
-    if grid_name in IN_ORDER:
+    if mask_name in REVERSE_ORDER:
         in_order = False
  
     lmask = SFN[mask_name](lsize*2, color.ctoi())
