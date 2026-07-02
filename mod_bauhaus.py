@@ -722,12 +722,9 @@ def generate(p: Param):
 
     # パターン生成（RGBA）
     pattern_big = generate_pattern(w, h, s, c1, c2, delta)
-    fg1 = Image.fromarray(pattern_big, 'RGBA')
-    print(f'big: {fg1.size}')
-    
     pattern = center_crop(pattern_big, w, h)
     fg = Image.fromarray(pattern, 'RGBA')
-    print(f'norm: {fg.size}')
+    # print(f'norm: {fg.size}')
 
     # 背景（RGB）
     if p.h_img is not None:

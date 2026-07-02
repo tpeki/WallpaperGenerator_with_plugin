@@ -445,7 +445,6 @@ def desc(p: Param):
             if pat == opat:
                 continue
         elif ev == '-t_flp-':
-            print(va)
             ml = wn['-t_pat-'].widget
             if ml.tag_ranges("sel"):
                 # 選択範囲の先頭と最後を取得
@@ -559,7 +558,7 @@ def generate(p: Param, pattern=None, cset=None):
     angle = p.pdepth
     if angle != 0:
         diagonal = int(math.ceil(math.sqrt(width**2 + height**2)))
-        print(diagonal)
+        # print(diagonal)
         width, height = diagonal, diagonal 
 
     if cset is None:

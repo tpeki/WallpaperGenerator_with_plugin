@@ -5,6 +5,7 @@ import sys
 import tempfile
 import glob
 import winreg
+# import win32gui, win32con
 from PIL import Image
 import time
 
@@ -15,6 +16,7 @@ STRETCH = 2  # アスペクト無視で引き伸ばす
 CENTER = 0  # 画面中央配置
 
 DEBUG = False
+SENDSTRICT = True
 
 def is_windows():
     """True if running under Windows"""
@@ -103,6 +105,41 @@ def set_wpstyle_registry(stretch, tiled=False):
     return
 
 
+def send_message_to_wp_workerw():
+    user32 = ctypes.windll.user32
+
+    EnumWindows = user32.EnumWindows
+    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p,
+                                         ctypes.c_void_p)
+    FindWindowExW = user32.FindWindowExW
+
+    def find_wallpaper_workerw():
+        workerw_list = []
+
+        def enum_windows_proc(hwnd, lParam):
+            # WorkerW か？
+            class_name = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, class_name, 256)
+            if class_name.value == "WorkerW":
+                # 子に SHELLDLL_DefView があるか？
+                child = FindWindowExW(hwnd, None, "SHELLDLL_DefView", None)
+                if child:
+                    workerw_list.append(hwnd)
+            return True
+
+        EnumWindows(EnumWindowsProc(enum_windows_proc), 0)
+
+        return workerw_list
+
+    # 壁紙描画 WorkerW を取得
+    wallpaper_workers = find_wallpaper_workerw()
+
+    # 通知送信
+    WM_SETTINGCHANGE = 0x1A
+    for hwnd in wallpaper_workers:
+        user32.SendMessageW(hwnd, WM_SETTINGCHANGE, 0, 0)
+
+
 def set_img_to_wp(img, typ='.bmp'):
     t0 = dbg_time()
 
@@ -126,15 +163,27 @@ def set_img_to_wp(img, typ='.bmp'):
         print('Temporaly save Error')
         return
 
+    user32 = ctypes.windll.user32
     SPI_SETDESKWALLPAPER = 20
     SPIF_UPDATEINIFILE   = 0x01
     SPIF_SENDCHANGE      = 0x02
-    
-    flags = SPIF_UPDATEINIFILE  # | SPIF_SENDCHANGE
+    WM_SETTINGCHANGE     = 0x1A
 
-    ret = ctypes.windll.user32.SystemParametersInfoW(
+    if SENDSTRICT:
+        flags = SPIF_UPDATEINIFILE
+    else:
+        flags = SPIF_UPDATEINIFILE | SPIF_SENDCHANGE
+
+    ret = user32.SystemParametersInfoW(
         SPI_SETDESKWALLPAPER, 0, image_path, flags
     )
+
+    if SENDSTRICT:
+        for class_name in ['Progman', 'Shell_TrayWnd']:
+            hwnd = user32.FindWindowW(class_name, None)
+            if hwnd:
+                user32.SendMessageW(hwnd,  WM_SETTINGCHANGE, 0, 0)
+        send_message_to_wp_workerw()
 
     if DEBUG:
         print('Set Wallpaper: Error=', ctypes.GetLastError())
