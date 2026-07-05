@@ -278,7 +278,7 @@ def set_param(window, param, mod_gui):
             if elem in ('color1','color2','color3'):
                 colr = getattr(param, elem)
                 fg,bg = bg_and_font(colr)
-                r,g,b = colr.ctoi()
+                r,g,b = to_rgb(colr)
                 window[f'-{elem}-1'].update(f'{r},{g},{b}',
                                             text_color=fg, bg=bg)
             else:

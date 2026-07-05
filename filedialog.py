@@ -49,7 +49,7 @@ def get_savefile(fname, filetypes='', init_dir='.'):
     return filename
 
 
-def frush_ev(window):
+def flush_ev(window):
     '''イベント空読み(filedialog読出後に安全のため利用)'''
     while True:
         e, v = window.read(timeout=0)

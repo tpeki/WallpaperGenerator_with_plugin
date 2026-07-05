@@ -67,9 +67,9 @@ def intro(modlist: Modules, module_name):
 
 # おすすめパラメータ
 def default_param(p: Param):
-    p.color1.itoc(*SPECIAL_COLOR1)
-    p.color2.itoc(*SPECIAL_COLOR2)
-    p.color3.itoc(*SPECIAL_COLOR3)
+    p.color1 = RGBColor(SPECIAL_COLOR1)
+    p.color2 = RGBColor(SPECIAL_COLOR2)
+    p.color3 = RGBColor(SPECIAL_COLOR3)
     p.color_jitter = BRIGHTNESS
     p.sub_jitter = SATURATION
     p.pwidth = PERIOD

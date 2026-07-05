@@ -701,7 +701,7 @@ def create_spr():
             ftypes = '*.png;*.jpg;*.gif;*.ico'
             fname = get_openfile('',
                                  filetypes=[('Bitmap',ftypes), ('any', '.*')])
-            frush_ev(wn)
+            flush_ev(wn)
             if fname is not None and fname != '':
                 img = Image.open(sanitize_filename(fname))
                 w,h = [min(MAX_SIZE[_],img.size[_]) for _ in (0,1)]  # ザイズ制限
@@ -1122,7 +1122,7 @@ def desc(p: Param):
         elif ev == '-dmp-':
             outdir = DATA_DIR+pa.sep+sprite_preserv.name
             ans = yn_dialog('Dump Item', f'Dump image to {outdir}', 'Dump')
-            frush_ev(wn)
+            flush_ev(wn)
             if ans:
                 dump_sprites(outdir)
         elif ev == '-sav-':
@@ -1133,7 +1133,7 @@ def desc(p: Param):
                 fname = 'temp'
             file = get_savefile(fname+'.spr', [('Sprite', '.spr'),],
                                 init_dir=DATA_DIR)
-            frush_ev(wn)
+            flush_ev(wn)
             if file is not None and file != '':
                 save_spr(file)
         elif ev == '-sel-':
@@ -1141,7 +1141,7 @@ def desc(p: Param):
             select_items()
             # print('Enabled: ',sprite_preserv.enabled)
             wn.un_hide()
-            frush_ev(wn)
+            flush_ev(wn)
         elif ev == '-anglsw-':
             anglsw = va['-anglsw-']
 

@@ -149,7 +149,7 @@ def desc(p: Param):
         elif ev == '-t_ld-':
             fname = wn['-t_file-'].get_text()
             cmds, fname = load_tur(fname)
-            frush_ev(wn)
+            flush_ev(wn)
             # print(f'FILE: {fname} / CMDS: {cmds}')
             if fname == '':  # =cancelled
                 continue
@@ -161,7 +161,7 @@ def desc(p: Param):
             fname = wn['-t_file-'].get_text()
             cmds = wn['-t_cmds-'].get_text()
             fname = save_tur(fname, cmds)
-            frush_ev(wn)
+            flush_ev(wn)
             if fname == '':  # =cancelled
                 continue
             wn['-t_file-'].update(text=fname)
