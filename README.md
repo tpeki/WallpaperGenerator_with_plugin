@@ -65,67 +65,42 @@ usage: wallpaper.pyw [-h] [- plugin_dir PLUGI _DIR] [--list_mod les] [--module
 
  　　※ 壁紙パターンをmod_*.py で追加できます
 
+- argyle: アーガイル柄
+- bauhaus: バウハウスっぽいタイル
 - bias: 斜め帯
-
 - chevron: ギザギザボーダー
-
 - dune: 砂丘？
-
 - easter: イースター風 たまご 時々 ひよこ
-
-- emoji: 絵文字(0:敷石 1:螺旋)   (プレビュークリックで拡張設定)
-
+- emoji: 絵文字(0:敷石 1:螺旋) 
 - flowerworks スピログラフをランダム/グリッド配置で
-
-- footprint: 足跡 (直線か時計回りのみ対応) 
-
-- gangi: 階段
-
+- footprint: 足跡 (直線か時計回りのみ対応)
+- gangi: 階段状ストライブ
 - garland: 垂れ幕  もしくは連提灯通り  間隔を両方マイナスにするとポルカドット
-
 - gladation: 染め分け/角度指定グラデーション 色数3だと中間色設定あり 色数1はベタ塗り
-
 - grass: 芝生シミュレータ
-
 - hexmap: グラデ六角タイル  color1=whiteの場合6色タイルに
-
 - hexmaze: 森の六角迷路
-
 - hilbert: ヒルベルト曲線
-
 - ivy: ツタ もしくは 植え込み
-
 - kaleidoscope: 万華鏡 くるくる回すだけでも楽しいかもしれない
-
-- memphis: メンフィス風
-
-- packingbubble: グラデーション泡
-
+- memphis: メンフィス風グラフィック
+- packingbubble: グラデーション泡充填
 - peano: ペアノ曲線
-
 - penrose: ペンローズタイル
-
-- polkadot 水玉模様的な
-
-- scallop: ホタテ貝
-
-- sprites: スプライトまみれ  (プレビュークリックでスプライトセットエディタ起動)
-
-- stripe: 縦ストライプ・モダン
-
-- tartan: タータン風チェック (プレビュークリックで柄エディタを起動)
-
+- polkadot 水玉模様的な繰り返しパターン
+- scallop: ホタテ貝(緋扇貝かもしれない)
+- sprites: スプライトまみれ ＋スプライトセットエディタ
+- stripe: 縦ストライプ・モダン柄
+- tartan: タータン風チェック＋柄エディタ
 - tiles: 正方形タイル (mode: 0=3色ミックス, 1=2色市松, 2=パース)
-
 - turtle: タートルコマンド描画 (プレビュークリックでコマンドエディタ起動)
-
 - waves: 青海波
 
   
 
 ## efx(効果)モジュール
 
-​	※ 追加効果を efx_*.py で追加できます。
+　　※ 追加効果を efx_*.py で追加できます。
 
 - メニューバーから AE_x を選択して、効果設定調整、OK押下でメイン画面に反映されます。
 

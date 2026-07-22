@@ -1,7 +1,4 @@
 import re
-import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, \
-     ImageChops, ImageOps, UnidentifiedImageError
 import random
 import math
 import copy
@@ -9,7 +6,10 @@ import glob
 import os
 import os.path as pa
 import TkEasyGUI as sg
-from filedialog import *
+import filedialog as fdi
+import numpy as np
+from PIL import Image, ImageDraw, ImageFilter, \
+     ImageChops, ImageOps, UnidentifiedImageError
 from wall_common import *
 
 # --- 定数設定 ---
@@ -185,14 +185,14 @@ sprite_preserv = SpriteSet()
 DIGIT_RE = re.compile(r'\d+')
 
 # 文字列 -> 数値変換 (16進考慮)
-def to_int(s):
+def safeint(s, default=0):
     try:
         val = int(s)
     except ValueError:
         if isinstance(s, str):
             val = int(s,0)
         else:
-            val = 0
+            val = default
     return val
 
 # -----
@@ -200,9 +200,9 @@ def to_int(s):
 # -----
 # 文字列の内容をtupleに
 def strtotuple(s: str):
-    '''","区切りで2要素以上、数値か"#"で始まる色文字列
+    """カンマ区切りで2要素以上、数値か#で始まる色文字列
         ただし、1要素目が空文字列の場合2要素目はコマンド文字列
-        1要素目,2要素目がlistもしくはtupleの場合もあり'''
+        1要素目,2要素目がlistもしくはtupleの場合もあり"""
     s = s.replace('[','').replace(']','')
     dat = [_.strip() for _ in s.split(',')]
     if len(dat) < 2:
@@ -243,15 +243,15 @@ def strtotuple(s: str):
 
 
 def load_spr(file:str):
-    '''テキストファイルからSPR形式のデータを読み込んでスプライトデータに'''
-    file = sanitize_filename(file, ext='.spr')
+    """テキストファイルからSPR形式のデータを読み込んでスプライトデータに"""
+    file = fdi.sanitize_filename(file, ext='.spr')
     path, base = pa.split(file)
     pdic = {}
 
     # print(f'path {path}  // base {base}')
-    source = read_filez(file, add_zip=ZIPFILE)
+    source = fdi.read_filez(file, add_zip=ZIPFILE)
     if source is None and path == '':
-        source = read_filez(DATA_DIR+pa.sep+file, add_zip=ZIPFILE)
+        source = fdi.read_filez(DATA_DIR+pa.sep+file, add_zip=ZIPFILE)
         if source is None:
             return [], ''
 
@@ -399,7 +399,7 @@ def compress(buf):
 
 
 def save_spr(file:str):
-    file = sanitize_filename(file, force_ext='.spr')
+    file = fdi.sanitize_filename(file, force_ext='.spr')
     set_name = pa.splitext(pa.basename(file))[0]
     sprite_preserv.name = set_name
     pdic = {}
@@ -427,7 +427,7 @@ def save_spr(file:str):
 # ビットマップで保存(dump)
 # -----
 def dump_sprites(outdir):
-    outdir = sanitize_dirname(outdir)
+    outdir = fdi.sanitize_dirname(outdir)
     if not pa.isdir(outdir):
         if not pa.exists(outdir):
             os.mkdir(outdir)
@@ -441,7 +441,7 @@ def dump_sprites(outdir):
         pat = sprite_pattern(item)
         img = sprite_image(pat)
         
-        file = sanitize_filename(item+'.png')
+        file = fdi.sanitize_filename(item+'.png')
         img.save(outdir+pa.sep+file)
         
     return
@@ -452,7 +452,7 @@ def dump_sprites(outdir):
 # -----
 # ライン当たり色数の制限
 def reduce_cpr(img, colors_per_row, method=1):
-    '''ビットマップを行当たりN色に減色'''
+    """ビットマップを行当たりN色に減色"""
     if img.mode != 'RGB':
         img = img.convert('RGB')
 
@@ -486,8 +486,8 @@ def reduce_cpr(img, colors_per_row, method=1):
 
 
 def conv_spr(img, transparent_color):
-    '''ビットマップをスプライト文字列に変換
-        透過色は #rrggbb形式で指定'''
+    """ビットマップをスプライト文字列に変換
+        透過色は #rrggbb形式で指定"""
     transparent_color = transparent_color.upper()
 
     w, h = img.size
@@ -545,7 +545,7 @@ def conv_spr(img, transparent_color):
 
 # 追加画面パレット
 def palette_extract(img, max_colors=16):
-    '''画像から使用色(上位16色まで)を抽出'''
+    """画像から使用色(上位16色まで)を抽出"""
     pals = img.getcolors()
     if pals is None:
         return []
@@ -554,7 +554,7 @@ def palette_extract(img, max_colors=16):
 
 
 def palette_draw(palette, trans=None):
-    '''パレット画像生成'''
+    """パレット画像生成"""
     pimg = Image.new('RGB',(164, 44))  # (8*20+4, 2*20+4)
     pd = ImageDraw.Draw(pimg)
 
@@ -671,7 +671,7 @@ def create_spr():
                 pcol = palette_extract(img)
                 trans = to_rgb(wn['-tcol-'].get())
                 if trans not in pcol:
-                    palette_draw(palette, trans=None)
+                    palette_draw(pcol, trans=None)
                     continue
                 pattern = conv_spr(img, rgb_string(trans))
                 # print(nname,' Pattern:', pattern[3])
@@ -685,7 +685,7 @@ def create_spr():
                 # print(f"'{nname}': {pat}")
             break
         elif ev == '-redc-':
-            ncpr = to_int(wn['-cpr-'].get())
+            ncpr = safeint(wn['-cpr-'].get())
             if ncpr != cpr and (0 < ncpr <= 16):
                 cpr = ncpr
                 rimg, pcols = update_preview(wn, img, cpr, trans)
@@ -699,16 +699,17 @@ def create_spr():
                 break
         elif ev == '-import-':
             ftypes = '*.png;*.jpg;*.gif;*.ico'
-            fname = get_openfile('',
-                                 filetypes=[('Bitmap',ftypes), ('any', '.*')])
-            flush_ev(wn)
+            fname = fdi.get_openfile('',
+                                     filetypes=[('Bitmap',ftypes),
+                                                ('any', '.*')])
+            fdi.flush_ev(wn)
             if fname is not None and fname != '':
-                img = Image.open(sanitize_filename(fname))
+                img = Image.open(fdi.sanitize_filename(fname))
                 w,h = [min(MAX_SIZE[_],img.size[_]) for _ in (0,1)]  # ザイズ制限
                 img = img.resize((w,h), resample=Image.NEAREST)
                 img = img.quantize(colors=16).convert('RGB')
                 wn['-fname-'].update(pa.splitext(pa.split(fname)[1])[0])
-                cpr = to_int(wn['-cpr-'].get())
+                cpr = safeint(wn['-cpr-'].get())
                 trans = to_rgb(wn['-tcol-'].get())
                 rimg, pcols = update_preview(wn, img, cpr, trans)
                 check_transparent(wn, pcols, trans)
@@ -782,7 +783,7 @@ def bulk_import():
 
 def read_and_conv(file, trans):
     if file is not None and file != '':
-        file=sanitize_filename(file)
+        file=fdi.sanitize_filename(file)
     try:
         img = Image.open(file)
     except UnidentifiedImageError:
@@ -803,7 +804,7 @@ def read_and_conv(file, trans):
 # スプライトパターン操作
 # -----
 def and_pat(orig, pat, n):
-    '''多値パターン文字列に畳み込み'''
+    """多値パターン文字列に畳み込み"""
     c = f'{n:X}'[-1:]
     if len(orig) < len(pat):
         orig = orig.ljust(len(pat),'0')[:len(pat)]
@@ -885,7 +886,7 @@ def sprite_pattern(name:str):
 # スプライトビットマップ生成
 # -----
 def draw_oneline(dr, p, colors, y):
-    '''1行分の処理'''
+    """1行分の処理"""
     if isinstance(colors, str):
         colors = [colors]
     for x in range(len(p)):
@@ -896,7 +897,7 @@ def draw_oneline(dr, p, colors, y):
 
 
 def sprite_image(pat: list):
-    '''スプライト内部データをビットマップに変換'''
+    """スプライト内部データをビットマップに変換"""
     img = Image.new('RGBA', (len(pat[0][0]),len(pat)), 0)
     dr = ImageDraw.Draw(img)
 
@@ -1039,17 +1040,17 @@ def sprite_preview():
 # スプライトセット設定
 # -----
 def sprfile_list(directory=DATA_DIR):
-    '''スプライトデータファイルの取得'''
+    """スプライトデータファイルの取得"""
     patn = directory+pa.sep+'*.spr'
     files = [fn.replace('.spr','') \
-             for fn in glob_filelistz(patn, add_zip=ZIPFILE)]
+             for fn in fdi.glob_filelistz(patn, add_zip=ZIPFILE)]
     files.append(INT_LABEL)
     return files
 
 
 def desc(p: Param):
-    ''' 利用スプライトセットの選択、追加など
-        (プラグイン時の設定画面)'''
+    """ 利用スプライトセットの選択、追加など
+        (プラグイン時の設定画面)"""
     global sprite_preserv
     sprite_backup = copy.deepcopy(sprite_preserv)
 
@@ -1113,7 +1114,7 @@ def desc(p: Param):
             if len(sprite_preserv.sprites) == 0:
                 continue
             last_key = next(reversed(sprite_preserv.sprites))
-            ans = yn_dialog('Purge Item', f'Delete {last_key}?', 'Sure')
+            ans = fdi.yn_dialog('Purge Item', f'Delete {last_key}?', 'Sure')
 
             if ans:
                 if len(sprite_preserv.sprites) > 0:
@@ -1121,8 +1122,8 @@ def desc(p: Param):
                     sprite_preserv.enabled.remove(last_key)
         elif ev == '-dmp-':
             outdir = DATA_DIR+pa.sep+sprite_preserv.name
-            ans = yn_dialog('Dump Item', f'Dump image to {outdir}', 'Dump')
-            flush_ev(wn)
+            ans = fdi.yn_dialog('Dump Item', f'Dump image to {outdir}', 'Dump')
+            fdi.flush_ev(wn)
             if ans:
                 dump_sprites(outdir)
         elif ev == '-sav-':
@@ -1131,9 +1132,10 @@ def desc(p: Param):
             fname = sprite_preserv.name
             if fname == INT_LABEL or fname == '':
                 fname = 'temp'
-            file = get_savefile(fname+'.spr', [('Sprite', '.spr'),],
-                                init_dir=DATA_DIR)
-            flush_ev(wn)
+            file = fdi.get_savefile(fname+'.spr',
+                                    [('Sprite', '.spr'),],
+                                    init_dir=DATA_DIR)
+            fdi.flush_ev(wn)
             if file is not None and file != '':
                 save_spr(file)
         elif ev == '-sel-':
@@ -1141,7 +1143,7 @@ def desc(p: Param):
             select_items()
             # print('Enabled: ',sprite_preserv.enabled)
             wn.un_hide()
-            flush_ev(wn)
+            fdi.flush_ev(wn)
         elif ev == '-anglsw-':
             anglsw = va['-anglsw-']
 
@@ -1158,61 +1160,11 @@ def desc(p: Param):
     return
 
 
-def simple_frontend():
-    '''仮フロントエンド'''
-    global sprite_preserv
-    sprite_backup = copy.deepcopy(sprite_preserv)
-
-    files = sprfile_list()
-
-    lo = [[sg.Listbox(files, default_value=INT_LABEL,select_mode='single',
-                      key='-list-')],
-          [sg.Text('',expand_x=True),
-           sg.Button('View', key='-prvw-'),
-           sg.Text('',expand_x=True),
-           sg.Button('Done', key='-ok-'),
-           sg.Button('Cancel', key='-can-')]]
-    wn = sg.Window('sprite', layout = lo )
-
-    while True:
-        ev, va = wn.read()
-        if ev == sg.WINDOW_CLOSED or ev == '-can-':
-            # print('Cancelled')
-            sprite_preserv = copy.deepcopy(sprite_backup)
-            break
-        elif ev == '-ok-':
-            if sprite_preserv.name != '':
-                break
-        elif ev == '-prvw-':
-            wn.hide()
-            setname = va['-list-'][0]
-            if INT_LABEL == setname:
-                sprite_preserv.load_internal()
-            else:
-                pdic, sdesc = load_spr(setname)
-                if len(pdic) == 0:
-                    sprite_preserv.load_internal()
-                else:
-                    sprite_preserv.set_pattern(setname, pdic, desc=sdesc)
-            desc()
-            wn.un_hide()
-            files = sprfile_list()
-            wn['-list-'].update(values=files)
-
-       
-        # print(ev, va)
-    wn.close()
-
-    print(f"SETNAME: {sprite_preserv.name}")
-    print(f"INCLUDES: {sprite_preserv.list()}")
-    print(f" - TOTAL {len(sprite_preserv.sprites)} SPRITES")
-
-
 # -----
 # モジュール動作
 # -----
 def outlined(image, width, border='#000000'):
-    '''輪郭強調'''
+    """輪郭強調"""
     width = min(max(width, 0), 10)
     if width == 0:
         return image
@@ -1233,7 +1185,7 @@ def outlined(image, width, border='#000000'):
 
 
 def starfield(w, h, pixel, star_density=2, seed=None):
-    '''Galagaっぽい星背景'''
+    """Galagaっぽい星背景"""
     rng = np.random.default_rng(seed)
 
     # 低解像度星マップ

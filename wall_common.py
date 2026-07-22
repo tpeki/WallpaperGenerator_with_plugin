@@ -174,7 +174,7 @@ class Modules:
             module_name = module_name.split('mod_')[1]
         if module_name not in self.modules:
             self.modules.append(module_name)
-            self.mod＿desc[module_name] = module_desc
+            self.mod_desc[module_name] = module_desc
             self.mod_gui[module_name] = using_gui_list
 
 
@@ -195,7 +195,7 @@ class EfxModules:
             module_name = module_name.split('efx_')[1]
         if module_name not in self.modules:
             self.modules.append(module_name)
-            self.mod＿desc[module_name] = module_desc
+            self.mod_desc[module_name] = module_desc
             self.mod_type[module_name] = spec_dict
 
 # 背景パターン
