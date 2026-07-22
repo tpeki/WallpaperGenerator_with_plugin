@@ -199,7 +199,7 @@ def safeint(s, default=0):
 # スプライト形式ファイル読込
 # -----
 # 文字列の内容をtupleに
-def strtotuple(s: str):
+def str_to_tuple(s):
     """カンマ区切りで2要素以上、数値か#で始まる色文字列
         ただし、1要素目が空文字列の場合2要素目はコマンド文字列
         1要素目,2要素目がlistもしくはtupleの場合もあり"""
@@ -281,7 +281,7 @@ def load_spr(file:str):
 
         #### 1行変換部分はbitmap->sprite と共用できないか
 
-        data = strtotuple(line)
+        data = str_to_tuple(line)
         if data is None:
             continue
 
@@ -474,7 +474,7 @@ def reduce_cpr(img, colors_per_row, method=1):
         # 2. 減色処理 (この部分はPILの高速なC実装を利用)
         # method=2 (Fast Octree) などを使うとさらに高速
         row_reduced = row_img.quantize(colors=colors_per_row,
-                                       method=2).convert('RGB')
+                                       method=Image.FASTOCTREE).convert('RGB')
 
         # 3. 減色後のデータをNumPy配列として元の配列へ書き戻す
         img_array[y:y+1, :, :] = np.array(row_reduced)
@@ -677,7 +677,7 @@ def create_spr():
                 # print(nname,' Pattern:', pattern[3])
                 pat = []
                 for itm in pattern:
-                    dat = strtotuple(itm)
+                    dat = str_to_tuple(itm)
                     pat.append(dat)
 
                 sprite_preserv.sprites[nname] = pat
@@ -755,7 +755,7 @@ def bulk_import():
         elif ev == '-ok-':
             foldername = va['-folder-']
             trans = va['-trns-']
-            if pa.isdir(foldername) == True:
+            if pa.isdir(foldername):
                 break
         
         print(ev, va)
@@ -766,7 +766,7 @@ def bulk_import():
     fnames = glob.glob(foldername+pa.sep+'*.*')
 
     print( f'folder={foldername}\ntrans={trans}')
-    cnt = 0
+    ## cnt = 0
     pdic = {}
     for file in fnames:
         nname = pa.splitext(pa.split(file)[1])[0]
@@ -794,7 +794,7 @@ def read_and_conv(file, trans):
     pattern = conv_spr(img, trans)
     pat = []
     for itm in pattern:
-        dat = strtotuple(itm)
+        dat = str_to_tuple(itm)
         pat.append(dat)
 
     return pat
@@ -1240,7 +1240,7 @@ def generate(p: Param):
     if sprite_preserv is None or sprite_preserv.name == '':
         sprite_preserv.load_internal()
 
-    sprites = sprite_preserv.sprites
+    # sprites = sprite_preserv.sprites
     activespr = sprite_preserv.enabled
 
     base = Image.new('RGBA',(w,h),0)
@@ -1268,8 +1268,7 @@ def generate(p: Param):
     # -----------------------------
     # circle collision
     # -----------------------------
-
-    def check_circle(cx,cy,r):
+    def check_circle(cx, cy, r, set=False):
 
         cx = int(cx/scale)
         cy = int(cy/scale)
@@ -1288,32 +1287,12 @@ def generate(p: Param):
             for x in range(x0,x1):
                 dx=x-cx
                 if dx*dx+dy*dy<=r2:
-                    if occ[y,x]:
+                    if set:
+                        occ[y, x] = True
+                    elif occ[y,x]:
                         return True
 
         return False
-
-
-    def draw_circle(cx,cy,r):
-
-        cx = int(cx/scale)
-        cy = int(cy/scale)
-        r = int(r/scale)
-
-        x0=max(cx-r,0)
-        x1=min(cx+r+1,occ_w)
-
-        y0=max(cy-r,0)
-        y1=min(cy+r+1,occ_h)
-
-        r2=r*r
-
-        for y in range(y0,y1):
-            dy=y-cy
-            for x in range(x0,x1):
-                dx=x-cx
-                if dx*dx+dy*dy<=r2:
-                    occ[y,x]=True
 
 
     # -----------------------------
@@ -1398,7 +1377,7 @@ def generate(p: Param):
 
         px,py=best
 
-        draw_circle(px,py,r)
+        check_circle(px, py, r, set=True)
 
         placed.append((px,py))
         placed_radius.append(r)
