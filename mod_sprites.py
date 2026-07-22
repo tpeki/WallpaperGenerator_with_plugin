@@ -582,19 +582,10 @@ def palette_img(img, trans=None):
 PREVIEW_SIZE=(272,240)
 
 def xy_keep_aspect(img):
-    w,h = img.size
-    aspr = PREVIEW_SIZE[0]/PREVIEW_SIZE[1]
-    if h*aspr > w:
-        y = PREVIEW_SIZE[1]
-        x = int(y*w/h)
-    else:
-        x = PREVIEW_SIZE[0]
-        y = int(x*h/w)
-
-    print(w,h,x,y)
-    return x, y
+    w, h = img.size
+    scale = min(PREVIEW_SIZE[0] / w, PREVIEW_SIZE[1] / h)
+    return int(w * scale), int(h * scale)
         
-
 
 def update_preview(wn, img, cpr, trans):
     rimg = reduce_cpr(img, cpr)
