@@ -15,6 +15,7 @@ shade_preserv = {'shade':{'shift':30, 'alpha':90, 'blur':20, 'adjbri':-80.0},
                  }
 File_types = [('PNG','*.png'),('JPG','*.jpg'),('Any','*.*'),]
 Preview_Size = (560,315)
+Shrink_Size = (192,108)
 
 # ==========
 # 関数登録用デコレータ
@@ -696,7 +697,6 @@ def efx(image, p: Param):
     global shade_preserv
     
     dcpy = copy.deepcopy(shade_preserv)
-    preview_size = Preview_Size
     MASKS = {FN[_]['display']: _ for _ in FN.keys()}
 
     W, H = p.width, p.height
@@ -748,8 +748,9 @@ def efx(image, p: Param):
     bgset = [[sg.Combo(bgmenu, default_value=bgmode, key='-bgsel-',
                        width=5, readonly=True, enable_events=True),
               sg.Text(' BG file:'),
-              sg.Button('Select BG', key='-file1-', background_color='#ffffdd'),
-              sg.Text(bgfile, key='-fn1-'),
+              sg.Text(bgfile, key='-fn1-', background_color='#f8f8f8',
+                      expand_x=True),
+              sg.Button('<File', key='-file1-', background_color='#ffffdd'),
               ],
              [sg.Checkbox('Swap FG/BG', default=False, key='-swap-'),
               sg.Text(' Plain: '),
@@ -762,7 +763,7 @@ def efx(image, p: Param):
               sg.Text(' ', expand_x=True),
             ]]
     buttonset = [[sg.Text('', expand_y=True)],
-                 [sg.Text(' '*4, expand_x=True),
+                 [sg.Text(' ', expand_x=True),
                   sg.Button('Test', key='-test-'),
                   sg.Button('Ok', key='-ok-', background_color='#ddffdd'),
                   sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
@@ -770,14 +771,14 @@ def efx(image, p: Param):
 
     lo = [[sg.Frame(title='Flavor Type', layout=menu_lo,
                     relief='ridge', expand_x=True)],
-          [sg.Image(size=preview_size, key='-timg-'),
+          [sg.Image(size=Preview_Size, key='-timg-'),
            sg.Column([[sg.Button('<',key='-pfold-', text_color='white',
                                  background_color='#6688cc')],
                       [sg.Text(expand_y=True)]], expand_y=True)],
           [sg.Frame('Common Shading', layout=shadeset, relief='ridge',
                     expand_x=True)],
           [sg.Frame('Background', layout=bgset, relief='ridge'),
-           sg.Column(buttonset),],
+           sg.Column(buttonset, expand_x=True, expand_y=True),],
            ]
            
     src_path = None
@@ -821,11 +822,11 @@ def efx(image, p: Param):
             bgmode = None
         elif ev == '-pfold-':
             if folded:
-                wn['-timg-'].update(size=preview_size)
+                wn['-timg-'].update(size=Preview_Size)
                 folded = False
                 wn['-pfold-'].update('<')
             else:
-                wn['-timg-'].update(size=(192,108))
+                wn['-timg-'].update(size=Shrink_Size)
                 folded = True
                 wn['-pfold-'].update('>')
             continue

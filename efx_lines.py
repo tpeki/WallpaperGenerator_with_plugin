@@ -10,9 +10,12 @@ import inspect
 lines_preserv = {'shade':{'shift':2, 'alpha':40, 'blur':5,},
                  'radial':{'exclude':240, 'freq':120},
                  'stripe':{'exclude':0, 'pitch':20, 'angle':0},
-                 'common':{'trans':255, 'duty':0.3},
+                 'common':{'trans':254, 'duty':0.3},
                  }
 Default_Stripe_Color = (192,192,192)
+Default_Stripe_Color2 = (128,128,128)
+Preview_Size = (560,315)  # (640, 360)
+Shrink_Size = (240,135)
 
 File_types = [('PNG','*.png'),('JPG','*.jpg'),('Any','*.*'),]
 FN = {}  # 登録先辞書
@@ -186,6 +189,129 @@ def radial(W, H, freq=120, exclude=240, cx=None, cy=None):
 
     return Image.fromarray((mask*255).astype(np.uint8), 'L')
 
+@reg(display="Zigged Stripes")
+def saba(W, H, lw=30, ll=480, sw=58, angle=84):
+    """
+    ジグザグ接続されたストライプマスク
+
+    lw    : 線幅
+    ll    : 長辺の長さ
+    sw    : ストライプの中心線間隔
+    angle : 回転角 [degree]
+
+    return : 'L' Image ;; not bool ndarray, shape=(H, W)
+    """
+
+    lw = prevset('lw', lw, 'saba')
+    ll = prevset('ll', ll, 'saba')
+    sw = prevset('sw', sw, 'saba')
+    angle = prevset('angle', angle, 'saba')
+
+    # 回転後にも十分な大きさになるよう、生成領域を決める
+    rad = np.deg2rad(angle)
+    ca = abs(np.cos(rad))
+    sa = abs(np.sin(rad))
+
+    bw = int(np.ceil(W * ca + H * sa)) + 4
+    bh = int(np.ceil(W * sa + H * ca)) + 4
+
+    # 回転時の端切れを避けるための余裕
+    margin = int(np.ceil(ll + sw + lw)) + 4
+
+    ww = bw + margin * 2
+    hh = bh + margin * 2
+
+    yy, xx = np.indices((hh, ww), dtype=np.float32)
+
+    lr = lw / 2
+    sr = sw / 2
+
+    # ==========================================================
+    # 1. 水平線
+    y0 = margin + sr
+
+    dy = np.mod(yy - y0 + sr, sw) - sr
+
+    mask = np.abs(dy) <= lr
+
+    # ==========================================================
+    # 2. ll + sw 周期で幅 sw の縦帯を消す
+    pitch_x = ll + sw
+
+    # 縦帯の中心
+    x0 = margin + ll + sr
+
+    dx = np.mod(xx - x0 + pitch_x / 2, pitch_x) - pitch_x / 2
+
+    gap = np.abs(dx) <= sr + lr  #(sw -lw)/ 2 
+
+    mask &= ~gap
+
+    # ==========================================================
+    # 2'. 長辺の切断端を丸める
+    # ==========================================================
+    r = lw / 2
+
+    # gap の左端・右端
+    left = np.abs(dx + sr + lr)
+    right = np.abs(dx - sr - lr)
+
+    circle = (
+        ((left ** 2 + dy ** 2) <= lr ** 2) |
+        ((right ** 2 + dy ** 2) <= lr ** 2)
+    )
+
+    mask |= circle
+
+    # ==========================================================
+    # 3. ジグザグ線
+
+    row = np.floor((yy - y0) / sw).astype(np.int32)  # 縦方向の区間番号
+    fy = (yy - y0) / sw  # 現在の水平線からの相対位置
+    t = fy - np.floor(fy)
+
+    gx = dx / sw   # 縦帯の中心
+    line_plus = gx - (t - 0.5)  # / の中心線
+    line_minus = gx + (t - 0.5)  # \ の中心線
+
+    inside_gap = np.abs(gx) <= 1.0
+
+    # 線分までの距離を求める
+    d_plus = np.abs(line_plus) * sw / np.sqrt(2)
+    d_minus = np.abs(line_minus) * sw / np.sqrt(2)
+
+    zig = np.where(
+        (row & 1) == 0,
+        d_plus <= lr,
+        d_minus <= lr,
+    )
+
+    mask |= inside_gap & zig
+
+    # ==========================================================
+    # 4. angle 回転
+    # PILでrotate
+    img = Image.fromarray(
+        mask.astype(np.uint8) * 255,
+        mode='L'
+    )
+
+    img = img.rotate(
+        angle,
+        resample=Image.Resampling.BICUBIC,
+        expand=False
+    )
+
+    x0 = (ww - W) // 2
+    y0c = (hh - H) // 2
+
+    img = img.crop(
+        (x0, y0c, x0 + W, y0c + H)
+    )
+
+    #return np.asarray(img) >= 128
+    return img
+
 
 # PROC functions
 # maskを貼る(numpy版)
@@ -238,12 +364,12 @@ def add_stripe(baseimg, mask, stripeimg):
     return Image.fromarray(result_np, mode='RGBA')
 
 
-def plain_image(W, H, base=(192,192,192), baseadd=(64,64,64), contrast=0.0):
+def plain_image(W, H, base=Default_Stripe_Color,
+                baseadd=64, contrast=0.0):
     c = []
     for i in range(3):
         c.append(clip8(base[i]))
-        if c[i] < 255 and baseadd[i] > 0:
-            c[i] = clip8(np.random.randint(c[i], base[i]+baseadd[i]))
+        c[i] = clip8(np.random.randint(c[i], base[i]+baseadd))
     img = Image.new('RGBA', (W, H), color=tuple(c))
 
     fg = np.array(img, dtype=np.float32)
@@ -251,6 +377,35 @@ def plain_image(W, H, base=(192,192,192), baseadd=(64,64,64), contrast=0.0):
     res = (fg * factor[...,None]).astype(np.uint8)
         
     return Image.fromarray(res, mode='RGBA')
+
+
+def grad_image(W, H, base=Default_Stripe_Color, base2=Default_Stripe_Color2,
+               baseadd=64, direction='v', contrast=0.0):
+    c1 = to_rgb(rgb_random_jitter(base, baseadd))
+    c2 = to_rgb(rgb_random_jitter(base2, baseadd))
+
+    if direction == 'h':
+        x_axis = np.linspace(0, 1, W)
+        u = np.tile(x_axis, (H, 1))
+    elif direction == 'v':
+        y_axis = np.linspace(0, 1, H).reshape(-1, 1)
+        u = np.tile(y_axis, (1, W))
+    else:
+        y, x = np.ogrid[:H, :W]
+        dx = np.abs(x - W/2)
+        dy = np.abs(y - H/2)
+        d = ((2*dx / W) ** 2 + (2*dy / H) ** 2) ** (1 / 2)
+        edge = 2 ** (1 / 2)
+        d /= edge
+        u = np.clip(d, 0.0, 1.0)
+
+    r, g, b = [(c1[i] * (1 - u) + c2[i] * u) for i in range(3)]
+    fg = np.dstack((r, g, b)).astype(np.uint8)
+
+    factor = swirl_marble(W,H, swirl=8, contrast=contrast)
+    res = (fg * factor[...,None]).astype(np.uint8)
+        
+    return Image.fromarray(res).convert('RGBA')
 
 
 def swirl_marble(W, H, freq=10, swirl=6, wobble=0.25, contrast=0.22):
@@ -330,7 +485,6 @@ def efx(image, p: Param):
     global lines_preserv
     
     dcpy = copy.deepcopy(lines_preserv)
-    preview_size = (640,360)
     MASKS = {FN[_]['display']: _ for _ in FN.keys()}
 
     W, H = p.width, p.height
@@ -348,10 +502,12 @@ def efx(image, p: Param):
     duty = lines_preserv['common']['duty']
     trans = lines_preserv['common']['trans']
 
-    bgmenu = ['FG', 'BG', 'File', 'Plain']
-    bgind = ['*frontimage*', '*internal*', '*file*', '*plain*']
+    bgmenu = ['FG', 'BG', 'File', 'Plain', 'V-Gra', 'H-Gra', 'R-Gra']
+    bgind = ['*frontimage*', '*internal*', '*file*', '*plain*',
+             '*V-grad*', '*H-grad*', '*radial grad*']
 
     base = Default_Stripe_Color
+    base2 = Default_Stripe_Color2
     addv = clip8(255 - max(base))
     swirlcont = 0
 
@@ -359,7 +515,7 @@ def efx(image, p: Param):
     if init_bgimg is None:
         bgfile = bgind[3]
         bgmode = 'Plain'
-        bgimg = plain_image(W,H, base=base, baseadd=(addv,addv,addv),
+        bgimg = plain_image(W,H, base=base, baseadd=addv,
                             contrast=swirlcont)
     else:
         bgfile = bgind[1]
@@ -368,60 +524,73 @@ def efx(image, p: Param):
  
     file_image = None
     fgc, bgc = bg_and_font(base)
+    fgc2, bgc2 = bg_and_font(base2)
      
     # UI panel                
     menu_lo = []
     for i, x in enumerate(FN.keys()):
         menu_lo.append(mask_line(x, True if i == 0 else False))
-    menu_lo.append([sg.Text('exclude=x,y will ellipsed-void / cx,cy is % for W,H',
+    menu_lo.append([sg.Text('cx,cy are % for W,H;  '\
+                            'Set "x,y" to exclude ellipsed void',
+                            text_color='#000077',
                             text_align='right', expand_x=True)])
 
     bgset = [[sg.Combo(bgmenu, default_value=bgmode, key='-bgsel-',
                        width=5, readonly=True, enable_events=True),
-              sg.Text(' '),
-              sg.Text(' File:'),
-              sg.Button('Select', key='-file1-', background_color='#ffffdd'),
-              sg.Text(bgfile, key='-fn1-', expand_x=True),
-              ],
-             [sg.Checkbox('Swap FG/BG', default=False, key='-swap-'),
+              sg.Checkbox('Swap FG/BG', default=False, key='-swap-'),
               sg.Text(' Plain: '),
-              sg.Button('Base', key='-bgc-', text_color=fgc,
+              sg.Button('BG', key='-bgc-', text_color=fgc,
                         background_color=bgc),
+              sg.Button('B2', key='-bgc2-', text_color=fgc2,
+                        background_color=bgc2),
               sg.Text('Jitter'), sg.Input(f'{clip8(255-max(*base))}',
                                           key='-badd-', width=4),
               sg.Text('Cont%'), sg.Input(f'{swirlcont}',
                                          key='-bcont-', width=4),
+              sg.Text(' '),
+              sg.Text(' File:'),
+              sg.Text(bgfile, key='-fn1-', background_color='#f8f8f8',
+                      expand_x=True),
+              sg.Button('< File', key='-file1-', background_color='#ffffdd'),
               ]]
-    shadeset = [[sg.Text(' Shift='),
+    shadeset = [[sg.Text('Shift', width=6, text_align='right'),
                  sg.Input(f'{shift}', key='-sshift-', width=4),
-                 sg.Text(' Blur='),
+                 sg.Text('Blur', width=6, text_align='right'),
                  sg.Input(f'{blur}', key='-sblur-', width=4),
-                 sg.Text(' Intent'),
+                 sg.Text('Intent', width=6, text_align='right'),
                  sg.Input(f'{alpha}', key='-salpha-', width=4),
-                 sg.Text(' ', expand_x=True),
-                 ]]
+                 sg.Text(' '),],
+                ]
     buttonset = [sg.Text(' '*4, expand_x=True),
                  sg.Button('Test', key='-test-'),
                  sg.Button('Ok', key='-ok-', background_color='#ddffdd'),
                  sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
                  ]
-    commonset = [[sg.Text('Duty'), sg.Input(f'{duty}',key='-duty-',width=4),],
-                 [sg.Text('Trans'), sg.Input(f'{trans}',key='-trns-',width=4),],
-                 [sg.Text('Trans <> Shade', expand_x=True, text_align='right')]
+    commonset = [[sg.Text('Duty', width=5, text_align='right'),
+                  sg.Input(f'{duty}',key='-duty-',width=4),
+                  sg.Text('Conc', width=5, text_align='right'),
+                  sg.Input(f'{trans}',key='-trns-',width=4),
+                  sg.Text('Trans 0 <-> 255 Solid', text_color='#000077',
+                          expand_x=True),]
                  ]
+    fold_button = sg.Column([[sg.Button('<',key='-pfold-', text_color='white',
+                                       background_color='#6688cc')],
+                            [sg.Text(expand_y=True)]], expand_y=True)
 
     lo = [[sg.Frame(title='Flavor Type', layout=menu_lo,
-                    relief='ridge', expand_x=True),
-           sg.Frame(title='Common', layout=commonset,
-                    relief='ridge', expand_y=True),],
-          [sg.Image(size=preview_size, key='-timg-')],
-          [sg.Frame('Stripe Fill', layout=bgset, relief='ridge'),
-           sg.Column([[sg.Frame('Shade', layout=shadeset, relief='ridge'),],
-                      buttonset])],
-          ]
-           
+                    relief='ridge', expand_x=True),],
+          [sg.Frame('Stripe Fill', layout=bgset,
+                    relief='ridge', expand_x=True),],
+          [sg.Frame('Duties', layout=commonset, relief='ridge',
+                    expand_x=True),
+           sg.Frame('Shade (ON: Conc=255)', layout=shadeset, relief='ridge'),],
+          [sg.Image(size=Preview_Size, key='-timg-'),
+           fold_button],
+          buttonset]
+
     src_path = None
     mask_name = next(iter(FN))
+    folded = False
 
     sample = add_stripe(fgimg, mask_name, bgimg) 
    
@@ -445,19 +614,42 @@ def efx(image, p: Param):
             if pa.exists(src_path):
                 file_image = Image.open(src_path).convert('RGBA')
                 file_image = file_image.resize((W,H), resample=Image.LANCZOS)
-                va['-bgsel-'] = 'File'
+                va['-bgsel-'] = bgmenu[2]  # File
                 bgmode = None
             fdi.flush_ev(wn)
         elif ev == '-bgc-':
-            base = to_rgb(sg.popup_color('Select Base Color', default_color=base))
+            base = to_rgb(sg.popup_color('Select Base Color',
+                                         default_color=base))
             fgc, bgc = bg_and_font(base)
             wn['-bgc-'].update(background_color=bgc, text_color=fgc)
-            va['-bgsel-'] = 'Plain'
+            no = bgmenu.index(va['-bgsel-'])
+            if no < 3:
+                va['-bgsel-'] = bgmenu[3]  # Plain
             bgmode = None
             fdi.flush_ev(wn)
+        
+        elif ev == '-bgc2-':
+            base2 = to_rgb(sg.popup_color('Select Base Color',
+                                          default_color=base2))
+            fgc2, bgc2 = bg_and_font(base2)
+            wn['-bgc2-'].update(background_color=bgc2, text_color=fgc2)
+            no = bgmenu.index(va['-bgsel-'])
+            if no < 4:
+                va['-bgsel-'] = bgmenu[4]  # Grad.
+            bgmode = None
+            fdi.flush_ev(wn)
+        
         elif ev == '-test-':
             bgmode = None
-
+        elif ev == '-pfold-':
+            if folded:
+                wn['-timg-'].update(size=Preview_Size)
+                folded = False
+                wn['-pfold-'].update('<')
+            else:
+                wn['-timg-'].update(size=Shrink_Size)
+                folded = True
+                wn['-pfold-'].update('>')
         if '-item-' in va:
             if va['-item-'] in FN:
                 mask_name = va['-item-']
@@ -468,32 +660,44 @@ def efx(image, p: Param):
         getval(va['-sblur-'], 'blur', blur, 'shade', lo=0)
         getval(va['-duty-'], 'duty', duty, 'common', lo=0.1)
         getval(va['-trns-'], 'trans', trans, 'common', lo=0, hi=255)
-
-        if va['-bgsel-'] == 'Plain' and bgmode != 'Plain':
+        
+        if va['-bgsel-'] == bgmenu[3] and bgmode != bgmenu[3]:  # Plain
             # print('Plain selected')
-            bgmode = 'Plain'
+            bgmode = bgmenu[3]
             wn['-fn1-'].update(bgind[3])
             addv = stoi(va['-badd-'])
             contrast = min(max(0,stoi(va['-bcont-'])),100)
-            bgimg = plain_image(W, H, base=base, baseadd=(addv,addv,addv),
+            bgimg = plain_image(W, H, base=base, baseadd=addv,
                                 contrast=contrast/100)
-        elif va['-bgsel-'] == 'File':
+        elif va['-bgsel-'] == bgmenu[2]:  # File
             # print('File selected')
-            if file_image is not None and bgmode != 'File':
-                bgmode = 'File'
+            if file_image is not None and bgmode != bgmenu[2]:
+                bgmode = bgmenu[2]
                 wn['-fn1-'].update(bgfile)
                 bgimg = file_image
-        elif va['-bgsel-'] == 'BG':
+        elif va['-bgsel-'] == bgmenu[1]:  # BG
             # print('BG selected')
-            if init_bgimg is not None and bgmode != 'BG':
-                bgmode = 'BG'
+            if init_bgimg is not None and bgmode != bgmenu[1]:
+                bgmode = bgmenu[1]
                 wn['-fn1-'].update(bgind[1])
                 bgimg = init_bgimg
-        elif va['-bgsel-'] == 'FG':  # and bgmode != 'FG':
+        elif va['-bgsel-'] == bgmenu[0]:  # and bgmode != 'FG':
             # print('FG selected')
-            bgmode = 'FG'
+            bgmode = bgmenu[0]
             wn['-fn1-'].update(bgind[0])
             bgimg = fgimg.copy()
+        else:  # any gradation
+            if va['-bgsel-'] in (bgmenu[x+4] for x in range(3)):
+                if bgmode != va['-bgsel-']:
+                    no = bgmenu.index(va['-bgsel-'])
+                    bgmode = bgmenu[no]
+                    wn['-fn1-'].update(bgind[no])
+                    addv = stoi(va['-badd-'])
+                    contrast = min(max(0,stoi(va['-bcont-'])),100)
+                    m = 'vhr'[no-4]
+                    bgimg = grad_image(W, H, base=base, base2=base2,
+                                       baseadd=addv, direction=m,
+                                       contrast=contrast/100)
 
         wn['-bgsel-'].update(bgmode)
                 

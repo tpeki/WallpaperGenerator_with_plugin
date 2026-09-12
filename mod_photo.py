@@ -67,7 +67,7 @@ def desc(p):
 
     lo = [[sg.Text('Load File'),
            sg.Input(pa.basename(oldf), width=30, key='-fname-',
-                    readonly=True, readonly_background_color='white'),
+                    readonly=True, readonly_background_color='#ffffdd'),
            sg.Button('...', key='-fget-', background_color='#ffffdd')
            ],
           [sg.Text('BGColor'),
@@ -149,6 +149,7 @@ def desc(p):
     wn.close()
     
     if ev == '-ok-':
+        scl = stoi(va['-scale-'], lo=1E-8)
         photo_preserv['file_name'] = oldf
         photo_preserv['scale'] = scl
         p.pwidth = scl

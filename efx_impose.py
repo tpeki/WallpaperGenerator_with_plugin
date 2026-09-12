@@ -317,7 +317,7 @@ class FgselP:
                                          key='-badd-', width=4),
              sg.Text(' '),
              sg.Text('File:'),
-             sg.Text(fname, key='-fn1-', background_color='white',
+             sg.Text(fname, key='-fn1-', background_color='#f8f8f8',
                      expand_x=True),
              sg.Button('< File', key='-file1-', background_color='#ffffdd'),
              ],
