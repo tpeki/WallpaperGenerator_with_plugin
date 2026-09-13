@@ -251,6 +251,7 @@ def saba(W, H, lw=30, ll=480, sw=58, angle=84):
     # 2'. 長辺の切断端を丸める
     # ==========================================================
     r = lw / 2
+    row = np.floor((yy - y0) / sw).astype(np.int32)  # 縦方向の区間番号
 
     # gap の左端・右端
     left = np.abs(dx + sr + lr)
@@ -259,14 +260,12 @@ def saba(W, H, lw=30, ll=480, sw=58, angle=84):
     circle = (
         ((left ** 2 + dy ** 2) <= lr ** 2) |
         ((right ** 2 + dy ** 2) <= lr ** 2)
-    )
+        )
 
     mask |= circle
 
     # ==========================================================
     # 3. ジグザグ線
-
-    row = np.floor((yy - y0) / sw).astype(np.int32)  # 縦方向の区間番号
     fy = (yy - y0) / sw  # 現在の水平線からの相対位置
     t = fy - np.floor(fy)
 
@@ -277,8 +276,9 @@ def saba(W, H, lw=30, ll=480, sw=58, angle=84):
     inside_gap = np.abs(gx) <= 1.0
 
     # 線分までの距離を求める
-    d_plus = np.abs(line_plus) * sw / np.sqrt(2)
-    d_minus = np.abs(line_minus) * sw / np.sqrt(2)
+    c = 0.85  # ジグザグ線幅調整 太<1<細
+    d_plus = c * np.abs(line_plus) * sw / np.sqrt(2)
+    d_minus = c * np.abs(line_minus) * sw / np.sqrt(2)
 
     zig = np.where(
         (row & 1) == 0,
