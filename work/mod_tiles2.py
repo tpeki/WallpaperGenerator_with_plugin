@@ -30,7 +30,7 @@ tiles_preserv = {'colors': [COLOR1, COLOR2, COLOR3, (0x64, 0x95, 0xed),
                  'common': {'ncolor': 3, 'tsize': TILE_SIZE,
                             'round': TILE_RADIUS, 'jitter': 30,
                             'shadeint': 0, 'shadecol': (0,0,0),
-                            'shadethick': 1},
+                            'shadethick': 1, '3d': 0},
                  'joint': {'color': ((JOINT_BRIGHTNESS,)*3),
                            'thick': JOINT_WIDTH, 'glain': SAND_GRAIN_SIZE,
                            'bright':INT_BRT , 'dark': INT_DRK,
@@ -66,27 +66,34 @@ def default_param(p: Param):
     return p
 
 
-def get_prev(atname, catname, default=None, lo=None. hi=None):
+def get_hist(atname, catname, default=None, lo=None, hi=None):
     if catname in tiles_preserv:
         categ = tiles_preserv[catname]
     else:
         categ = {}
         tiles_preserv[catname] = categ
     if atname in categ:
-        v = categ[atname]
-        if v is None:
-            v = default
-            categ[atname] = v
+        value = categ[atname]
+        if value is None:
+            value = default
+            categ[atname] = value
     else:
-        v = default
-        categ[atname] = v
+        value = default
+        categ[atname] = value
 
     if lo is not None:
-        v = max(lo, v)
+        value = max(lo, value)
     if hi is not None:
-        v = min(hi, v)
+        value = min(hi, value)
+    return value
 
-    return v
+
+def set_hist(atname, catname, value):
+    if catname not in tiles_preserv:
+        tiles_preserv[catname] = {}
+    tiles_preserv[catname][atname] = value
+    return
+
 
 # ---
 # 生成
@@ -102,9 +109,26 @@ def find_coeffs(pa, pb):
     res = np.linalg.solve(A, B)
     return np.array(res).reshape(8)
 
+def pre_rotate_size(target_w, target_h, angle_rad):
+    s = abs(np.sin(angle_rad))
+    c = abs(np.cos(angle_rad))
+
+    # target を -angle 回転したときの外接矩形サイズ
+    Bw = target_w * c + target_h * s
+    Bh = target_w * s + target_h * c
+
+    # 同じアスペクト比の外接矩形 temp_w,temp_h のスケール係数
+    k = max(Bw / target_w, Bh / target_h)
+
+    temp_w = k * target_w
+    temp_h = k * target_h
+
+    return temp_w, temp_h, k
+
 
 def generate(p: Param):
-    width, height = p.width, p.height
+    org_w, org_h = p.width, p.height
+    width, height = org_w, org_h
 
     d = p.pwidth  #Tile size
     r = p.pheight  # Tile radius
@@ -118,15 +142,25 @@ def generate(p: Param):
         sand_intensity = 0
         sand_int_add = ((INT_BDR-p.sub_jitter)/INT_BDR)**2 * INT_DRK
     jitter = p.color_jitter
-    color1 = rgb_random_jitter(p.color1, jitter).ctoi()
-    color2 = rgb_random_jitter(p.color2, jitter).ctoi()
-    color3 = rgb_random_jitter(p.color3, jitter).ctoi()
+
+    colors = tiles_preserv['colors']
+    colors[0] = p.color1.ctoi()
+    colors[1] = p.color2.ctoi()
+    colors[2] = p.color3.ctoi()
     if (p.sub_jitter2 & 1) == 1:
         colors = [color1, color2]
     else:
         colors = [color1, color2, color3]
-    if (p.sub_jitter2 & 2) == 2:
-        org_w, org_h = width, height
+    num_colors = get_hist('ncolor', 3, 'common')
+
+    angle = get_hist('angle', 0, 'common') % 360
+    if angle != 0:
+        rad = np.deg2rad(angle)
+        width = np.cos(rad) * width
+        
+
+    parse = get_hist('3d', 0, 'common') == 1
+    if parse:  # 3dにする場合は元画像を大きめに
         margin_w, margin_h = int(width*0.3), int(height*0.3)
         width = width+margin_w*2
         height = height+margin_h*2
@@ -144,7 +178,6 @@ def generate(p: Param):
     total_w = cols * d
     offset_y = (height - total_h) // 2
     offset_x = (width - total_w) // 2
-    num_colors = len(colors)
 
     # タイルごとの色インデックスを記録
     color_indices = np.full((rows, cols), -1, dtype=int)
