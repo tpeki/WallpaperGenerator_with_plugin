@@ -30,13 +30,15 @@ tiles_preserv = {'colors': [COLOR1, COLOR2, COLOR3, (0x64, 0x95, 0xed),
                  'common': {'ncolor': 3, 'tsize': TILE_SIZE,
                             'round': TILE_RADIUS, 'jitter': 30,
                             'shadeint': 0, 'shadecol': (0,0,0),
-                            'shadethick': 1, '3d': 0},
+                            'shadethick': 1, '3d': 0, 'pers': PERS,
+                            'angle': 30, },
                  'joint': {'color': ((JOINT_BRIGHTNESS,)*3),
-                           'thick': JOINT_WIDTH, 'glain': SAND_GRAIN_SIZE,
+                           'thick': JOINT_WIDTH, 'grain': SAND_GRAIN_SIZE,
                            'bright':INT_BRT , 'dark': INT_DRK,
                            'boder': INT_BDR},
                  'scratchedsand': {'grad': GRAD_STR, 'pitch':LINTERVAL,
-                                   'grain': NOISE_THICK, 'density': NOISE_RATE},
+                                   'grain': NOISE_THICK,
+                                   'density': NOISE_RATE},
                  }
                                    
 
@@ -46,7 +48,6 @@ def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, '正方形タイル [モード 0=3色 / 1=2色 / 2=遠近法]',
                        {'color1':'色1', 'color2':'色2', 'color3':'色3',
                         'color_jitter':'色幅', 'sub_jitter':'目地明度',
-                        'sub_jitter2':'モード',
                         'pwidth':'タイル幅', 'pheight':'角半径',
                         'pdepth':'目地幅(%)'})
     return module_name
@@ -62,7 +63,6 @@ def default_param(p: Param):
     p.pdepth = JOINT_WIDTH
     p.color_jitter = JITTER
     p.sub_jitter = JOINT_BRIGHTNESS
-    p.sub_jitter2 = CHECKER
     return p
 
 
@@ -107,9 +107,42 @@ def find_coeffs(pa, pb):
     A = np.matrix(matrix, dtype=float)
     B = np.array(pb).reshape(8)
     res = np.linalg.solve(A, B)
+
     return np.array(res).reshape(8)
 
-def pre_rotate_size(target_w, target_h, angle_rad):
+def trans_pers(image, margin_w, margin_h, org_w, org_h, view):
+    
+    # --- パース変換の定義 ---
+    # 大きな画像の中から、どの台形領域を抜き出して(width, height) に
+    # フィットさせるか
+    tilt = org_w * view  # パース強度 
+    
+    # ターゲット（台形）の4点座標
+    # 奥（上辺）を狭くし、手前（下辺）を広く取る
+    src_points = [
+        (margin_w + org_w + tilt, margin_h + org_h), # 右下
+        (margin_w - tilt, margin_h + org_h),      # 左下
+        (margin_w + tilt, margin_h),              # 左上
+        (margin_w + org_w - tilt, margin_h),     # 右上
+    ]
+    
+    # 出力先の四隅
+    dest_points = [
+        (0, 0), (org_w, 0), (org_w, org_h), (0, org_h)
+    ]
+
+    coeffs = find_coeffs(dest_points, src_points)
+    
+    # 変形と同時に、指定サイズで切り出し
+    image = image.transform((org_w, org_h), Image.PERSPECTIVE,
+                            coeffs, Image.BICUBIC)
+
+    return image
+
+
+def pre_rotate_size(target_w, target_h, angle):
+    """angle度回転した後targetが内接できるサイズ(W,H)を求める"""
+    angle_rad = np.deg2rad(angle)
     s = abs(np.sin(angle_rad))
     c = abs(np.cos(angle_rad))
 
@@ -123,48 +156,51 @@ def pre_rotate_size(target_w, target_h, angle_rad):
     temp_w = k * target_w
     temp_h = k * target_h
 
-    return temp_w, temp_h, k
+    return int(temp_w), int(temp_h)  #, k
 
 
 def generate(p: Param):
     org_w, org_h = p.width, p.height
     width, height = org_w, org_h
 
-    d = p.pwidth  #Tile size
-    r = p.pheight  # Tile radius
-    joint_width = min(max(1, int(d * p.pdepth / 100)), d-1)
-    joint_color = [p.sub_jitter]*3
-    sand_grain_size = SAND_GRAIN_SIZE  # * p.sub_jitter/512
-    if p.sub_jitter > INT_BDR:
-        sand_intensity = 1.0 - INT_BRT
+    d = get_hist('tsize', 'common', p.pwidth)  #Tile size
+    r = get_hist('round', 'common', p.pheight)  # Tile radius
+    jw = get_hist('thick', 'joint', p.pdepth)
+    joint_width = min(max(1, int(d * jw / 100)), d-1)
+    joint_color = get_hist('color', 'joint', ((p.sub_jitter,)*3))
+    joint_brightness = sum(joint_color)/len(joint_color)
+    
+    sand_grain_size = get_hist('grain', 'joint', SAND_GRAIN_SIZE)
+    int_bdr = get_hist('border', 'joint', INT_BDR)
+    int_brt = get_hist('bright', 'joint', INT_BRT)
+    int_drk = get_hist('dark', 'joint', INT_DRK)
+    if joint_brightness > int_bdr:
+        sand_intensity = 1.0 - int_brt
         sand_int_add = 0
     else:
         sand_intensity = 0
-        sand_int_add = ((INT_BDR-p.sub_jitter)/INT_BDR)**2 * INT_DRK
-    jitter = p.color_jitter
+        sand_int_add = ((int_bdr-joint_brightness)/int_bdr)**2 * int_drk
+
+    jitter = get_hist('jitter', 'common', p.color_jitter)
 
     colors = tiles_preserv['colors']
     colors[0] = p.color1.ctoi()
     colors[1] = p.color2.ctoi()
     colors[2] = p.color3.ctoi()
-    if (p.sub_jitter2 & 1) == 1:
-        colors = [color1, color2]
-    else:
-        colors = [color1, color2, color3]
-    num_colors = get_hist('ncolor', 3, 'common')
+    num_colors = get_hist('ncolor', 'common', 3)
 
-    angle = get_hist('angle', 0, 'common') % 360
-    if angle != 0:
-        rad = np.deg2rad(angle)
-        width = np.cos(rad) * width
-        
-
-    parse = get_hist('3d', 0, 'common') == 1
-    if parse:  # 3dにする場合は元画像を大きめに
+    persmode = get_hist('3d', 'common', 0) == 1
+    pers_str = get_hist('pers', 'common', PERS)
+    if persmode:  # 3dにする場合は元画像を大きめに
         margin_w, margin_h = int(width*0.3), int(height*0.3)
         width = width+margin_w*2
         height = height+margin_h*2
     
+    angle = get_hist('angle', 'common', 0) % 360
+    if angle != 0:
+        a_width, a_height = width, height
+        width, height = pre_rotate_size(width, height, angle)
+
     # 1. ベース作成（目地色）
     img_array = np.full((height, width, 3), joint_color, dtype=np.float32)
     grain_mask = np.random.rand(height, width) < sand_grain_size
@@ -259,39 +295,21 @@ def generate(p: Param):
             img_array[dy0:dy1, dx0:dx1][m] = tile_rgb[m]  # .astype(np.uint8)
 
     # --- 最後に一括で目地・タイル全体のノイズ処理 ---
-    ##noise = np.random.normal(0, 2, img_array.shape).astype(np.int16)
-    ##img_arry = np.clip(img_array.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-    #noise = np.random.normal(0, 2, img_array.shape)
-    #img_array = np.clip(img_array + noise, 0, 255).astype(np.uint8)
     img_array = np.clip(img_array, 0, 255).astype(np.uint8)
-    image = Image.fromarray(img_array)
+    image = Image.fromarray(img_array).convert('RGBA')
 
-    if (p.sub_jitter2 & 2) == 2:
-        # --- パース変換の定義 ---
-        # 大きな画像の中から、どの台形領域を抜き出して(width, height) に
-        # フィットさせるか
-        tilt = org_w * PERS  # パース強度 
-        
-        # ターゲット（台形）の4点座標
-        # 奥（上辺）を狭くし、手前（下辺）を広く取る
-        src_points = [
-            (margin_w + org_w + tilt, margin_h + org_h), # 右下
-            (margin_w - tilt, margin_h + org_h),      # 左下
-            (margin_w + tilt, margin_h),              # 左上
-            (margin_w + org_w - tilt, margin_h),     # 右上
-        ]
-        
-        # 出力先の四隅
-        dest_points = [
-            (0, 0), (org_w, 0), (org_w, org_h), (0, org_h)
-        ]
+    if angle != 0:
+        image = image.rotate(angle, resample=Image.BICUBIC, expand=True)
+        iw, ih = image.size
+        sx, sy = (iw-a_width)//2,(ih-a_height)//2 
+        # image.show()
+        # print(iw,ih, '->', sx,sy, sx+a_width, sy+a_height)
+        image = image.crop((sx,sy, sx+a_width, sy+a_height))
 
-        coeffs = find_coeffs(dest_points, src_points)
-        
-        # 変形と同時に、指定サイズで切り出し
-        image = image.transform((org_w, org_h), Image.PERSPECTIVE,
-                                coeffs, Image.BICUBIC)
-            
+    if persmode:
+        image = trans_pers(image, margin_w, margin_h,
+                           org_w, org_h, pers_str)
+  
     return image
 
 # --- 実行 ---
