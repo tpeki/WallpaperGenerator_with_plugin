@@ -83,7 +83,7 @@ def regi(func):
                                                
 # module基本情報
 def intro(modlist: Modules, module_name):
-    modlist.add_module(module_name, '正方形タイル [モード 0=3色 / 1=2色 / 2=遠近法]',
+    modlist.add_module(module_name, '正方形タイル',
                        {'color1':'色1', 'color2':'色2', 'color3':'色3',
                         'color_jitter':'色幅', 'sub_jitter':'目地明度',
                         'pwidth':'タイル幅', 'pheight':'角半径',
@@ -769,7 +769,9 @@ def generate(p: Param):
             surf.col = col
 
             # 色の決定
-            if num_colors == 2:  # 2色の場合は市松模様
+            if num_colors < 2:
+                c_idx = 0
+            elif num_colors == 2:  # 2色の場合は市松模様
                 c_idx = (row + col) % 2
             else:  # 3色以上の場合は、同色3枚隣接禁止のランダム
                 possible_idx = list(range(num_colors))
