@@ -153,9 +153,8 @@ def desc(p):
              sg.Text(f'(max {MAX_BAND_NUM})', text_color='#444466'),],
             ]
 
-    buttons = [sg.Text('Color set'),
-               sg.Button('Load', key='-ld-', background_color='#ffffdd'),
-               sg.Button('Save', key='-sv-', background_color='#ffffdd'),
+    buttons = [sg.Button('Load Palette', key='-ld-', background_color='#ffffdd'),
+               sg.Button('Save Palette', key='-sv-', background_color='#ffffdd'),
                sg.Text(size=(20,1), key='-fname-'),
                sg.Text(expand_x=True),
                sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
@@ -189,7 +188,7 @@ def desc(p):
                 colors[n] = to_rgb(colr)
             fdi.flush_ev(wn)
         elif ev == '-ld-':
-            n_colors = load_palette(fname)
+            n_colors = fdi.load_palette(fname, MAX_BAND_NUM)
             # showpal(n_colors, 'load')
             if n_colors is None:
                 continue
@@ -198,7 +197,7 @@ def desc(p):
             colors = n_colors
             fdi.flush_ev(wn)
         elif ev == '-sv-':
-            fname = save_palette(colors)
+            fname = fdi.save_palette(colors)
             if fname is not None:
                 wn['-fname-'].update(pa.basename(fname))
             fdi.flush_ev(wn)
@@ -236,69 +235,6 @@ def color_jitter(colors, cjit, sjit):
                      
     return newc
     
-
-def save_palette(colors):
-    fname = fdi.get_savefile('default.pal', filetypes=[('palette', '*.pal')],
-                             init_dir='samples')
-    if fname is None:
-        return None
-    try:
-        with open(fname, mode='w', encoding='sjis') as f:
-            f.write('[Colors]\n')
-            for i, (r,g,b) in enumerate(colors):
-                f.write(f'Color{i}=({r},{g},{b})\n')
-        return fname
-    except Excewption as e:
-        print('Error:', e)
-        return None
-
-
-def load_palette(fname='default.pal'):
-    filetypes = [('palette', '*.pal'),
-                 ('tartan set', '*.ttn')]
-    fname = fdi.get_openfile(fname, filetypes=filetypes,
-                             init_dir='samples')
-    if fname is None:
-        return None
-    with open(fname, mode='r', encoding='sjis') as f:
-        buf = f.read().splitlines()
-
-    p = 0
-    while True:
-        if buf[p].startswith('[Colors]'):
-            break
-        p += 1
-        if p == len(buf):
-            return None
-    p += 1
-    colors = ([None]*MAX_BAND_NUM)
-    c = 0
-    while True:
-        m = re.match(r'Color(\d+)=\(\s*(\d+),\s*(\d+),\s*(\d+)\)', buf[p])
-        if m:
-            cno = int(m.group(1))
-            r = int(m.group(2))
-            g = int(m.group(3))
-            b = int(m.group(4))
-            if 0<= cno < MAX_BAND_NUM:
-                colors[cno] = (r,g,b)
-                c += 1
-                if c == MAX_BAND_NUM:
-                    break
-            else:
-                print(f'no match: {p[buf]}')
-                
-        p += 1
-        if p == len(buf):
-            break
-
-    k = 255 // MAX_BAND_NUM
-    for i in range(MAX_BAND_NUM):
-        if colors[i] is None or not isinstance(colors[i], tuple):
-            colors[i] = colors[i%3] if i > 2 else (i*k,i*k,i*k)
-
-    return colors
-
 
 # バイアス生成
 def generate(p: Param):

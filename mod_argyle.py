@@ -101,10 +101,10 @@ def desc(p):
     button_section = [[sg.Text(''),],
                       [sg.Text(''),],
                       [sg.Text('',expand_x=True),
-                       sg.Button('OK', key='-ok-',
-                                 background_color='#ddffdd'),
                        sg.Button('Cancel', key='-can-',
-                                 background_color='#ffdddd'),]
+                                 background_color='#ffdddd'),
+                       sg.Button('OK', key='-ok-',
+                                 background_color='#ddffdd'),]
                       ]
     lo = [[sg.Column(base_colors_section, pad=(20,0)),
            sg.Column(stitch_colors_section,pad=(20,0))],

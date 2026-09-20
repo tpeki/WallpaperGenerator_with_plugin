@@ -1,8 +1,9 @@
+from wall_common import *
 import math
 import numpy as np
 from PIL import Image, ImageDraw
 import TkEasyGUI as sg
-from wall_common import *
+import filedialog as fdi
 
 # --- 定数設定 ---
 PATTERN_SIZE = 80
@@ -68,6 +69,7 @@ APPENDS = [
 FN = {}
 
 memphis_preserv = {
+    'colors': COLORS,
     'shapes': [],
     }
 
@@ -946,12 +948,14 @@ def desc(p: Param):
     lo = [[sg.Frame('', layout=sha_lo, relief='groove', expand_x=True)],
           [sg.Frame('', layout=apd_lo, relief='groove', expand_x=True)],
           [sg.Button('Clear', key='-clr-', background_color='#ffffdd'),
+           sg.Text('  '),
+           sg.Button('Palette', key='-palet-', background_color='#ddddff'),
            sg.Text('', key='-msg-', expand_x=True),
            sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
            sg.Button('Ok', key='-ok-', background_color='#ddffdd')],
           ]
 
-    wn = sg.Window('Choose pattern-groups', layout=lo, modal=True)
+    wn = sg.Window('Choose pattern-groups', layout=lo)
     while True:
         ev, va = wn.read()
         
@@ -968,6 +972,11 @@ def desc(p: Param):
                 wn[f'-apd{i:02d}-'].set_value(False)
             wn['-sha-'].set_value(True)
             wn.refresh()
+        elif ev == '-palet-':
+            ret = palette_subconf(p)
+            fdi.flush_ev(wn)
+            print(ret)
+            print(to_rgb(p.color1))
         else:
             wn['-msg-'].update('')
 
@@ -982,12 +991,122 @@ def desc(p: Param):
         if f'-apd{i:02d}-' in result:
             new_shapes.append(APPENDS[i])
 
-    if current == new_shapes:
-        return
+    #if current == new_shapes:
+    #    return
     
     memphis_preserv['shapes'] = new_shapes
     # print(memphis_preserv['shapes'])
     return generate(p)
+
+
+def palette_subconf(p):
+    def color_cell(color, key):
+        fgc,bgc = bg_and_font(color)
+        return sg.Button(bgc[1:], key=key, width=6, text_color=fgc,
+                         background_color=bgc, pad=((1,5),(1,1)))
+    def get_color(key):
+        oldc = '#' + wn[key].get()
+        ci = to_rgb(sg.popup_color('Select Color', default_color=oldc))
+        if ci is not None:
+            fgc, bgc = bg_and_font(ci)
+            wn[key].update(text=bgc[1:], text_color=fgc, background_color=bgc)
+        fdi.flush_ev(wn)
+        return ci
+    def update_color_cell(color, key):
+        fgc,bgc = bg_and_font(color)
+        wn[key].update(text=bgc[1:], text_color=fgc, background_color=bgc)
+    def fill_list(color_set, num):
+        if not isinstance(color_set, list):
+            color_set = []
+        color_set = (color_set + [None]*num)[:num]    
+        for i in range(8):
+            k = 32*i
+            if not isinstance(color_set[i], tuple|list):
+                color_set[i] = (k,)*3
+        return color_set
+
+    colors = [p.color1.ctoi(), p.color2.ctoi()]
+    colors.extend(memphis_preserv['colors'])
+    colors = fill_list(colors, 8)
+
+    cp1 = []
+    for i in range(2):
+        cp1.append([
+            sg.Text(f'BG Color{i+1}', width=10),
+            color_cell(colors[i], f'-c-{i}-')])
+    cp1.append([sg.Text(expand_y=True),])
+    left = sg.Column(cp1, expand_y=True)
+    cp2 = []
+    for i in range(3):
+        cp2.append([
+            sg.Text(f'Item Color{i+1}', width=10),
+            color_cell(colors[i+2], f'-c-{i+2}-'),
+            sg.Text(f'Item Color{i+4}', width=10),
+            color_cell(colors[i+5], f'-c-{i+5}-'),
+            ])
+    right = sg.Column(cp2)
+    bottom = [sg.Button('Reset', key='-rst-', width=4,
+                        background_color='#ffdddd'),
+              sg.Button('Load', key='-ld-', width=4,
+                        background_color='#ddddff'),
+              sg.Button('Save', key='-sv-', width=4,
+                        background_color='#ddddff'),
+              sg.Text('', key='-fname-', expand_x=True, width=12),
+              sg.Button('Cancel', key='-can-', width=6,
+                        background_color='#ffdddd'),
+              sg.Button('Done', key='-ok-', width=6,
+                        background_color='#ddffdd'),
+              ]
+    wn = sg.Window('Palette', layout=[[left, sg.Text(' '), right], bottom])
+    palname = 'default.pal'
+    
+    while True:
+        ev, va = wn.read()
+
+        if ev in ('-ok-', '-can-', sg.WINDOW_CLOSED):
+            break
+        elif ev.startswith('-c-'):
+            ci = get_color(ev)
+            if ci != None:
+                colors[int(ev[3])] = ci
+            continue
+        elif ev == '-sv-':
+            #save
+            fname = fdi.save_palette(colors)
+            if fname is not None:
+                wn['-fname-'].update(pa.basename(fname))
+                palname = fname
+            fdi.flush_ev(wn)
+            continue
+        elif ev == '-ld-':
+            #load
+            new_colors = fdi.load_palette(palname, 8)
+            if new_colors is None:
+                continue
+            colors = fill_list(new_colors, 8)
+            for i in range(8):
+                update_color_cell(colors[i], f'-c-{i}-')
+            fdi.flush_ev(wn)
+            continue
+        elif ev == '-rst-':
+            #reset
+            colors[0] = to_rgb(BGCOLOR1)
+            colors[1] = to_rgb(BGCOLOR2)
+            for i, x in enumerate(COLORS):
+                colors[i+2] = to_rgb(x)
+            colors = fill_list(colors, 8)
+            for i in range(8):
+                update_color_cell(colors[i], f'-c-{i}-')
+            continue
+
+    wn.close()
+    if ev == '-ok-':
+        p.color1 = RGBColor(colors[0])
+        p.color2 = RGBColor(colors[1])
+        memphis_preserv['colors'] = colors[2:]
+        return colors
+    else:
+        return None
 
 
 # ----
@@ -1095,7 +1214,7 @@ def generate(p: Param):
     if len(memphis_preserv['shapes']) == 0:
         memphis_preserv['shapes'].extend(SHAPES)
     shapes = memphis_preserv['shapes']
-    colors = COLORS
+    colors = memphis_preserv['colors']
 
     # =========================
     # 可変半径（重要）

@@ -2,6 +2,7 @@ import numpy as np
 from PIL import Image
 from wall_common import *
 import TkEasyGUI as sg
+import filedialog as fdi
 import copy
 
 #--------------------
@@ -16,6 +17,9 @@ COLOR2 = (30, 80, 120)
 JITTER = 48  # c1,c2共通でrgbに加算(ただしclipされる)
 BGCOLOR = (190, 195, 190)
 
+"""Flag:  r/n=反転パターンのenable/disable
+          1,2=回転パターンの制限(省略時4方向)
+          a=重ね書きあり"""
 DEFAULT_WEIGHTS = [
     # Name,         reverse_flag,   probability
     ['half_circle', 'r2', 0.8],
@@ -33,6 +37,8 @@ DEFAULT_WEIGHTS = [
     ['dbl_ring',    'r1', 0.1],
     ['half_triangl','n',  1.0],
     ['dbl_triangle','r',  0.2],
+    ['stlf_triangl','n',  0.0],
+    ['strf_triangl','n',  0.0],
     ['square',      'n',  0.0],
     ['boko',        'n',  0.4],
     ['half_box',    'n',  0.2],
@@ -105,10 +111,14 @@ def half_triangl(x, y, S):
     return y >= x
 
 @register
-def inset_square(x, y, S):
-    h = S//4
-    edge = (x<h)|(S-h<x)|(y<h)|(S-h<y)
-    return (y >= x) ^ edge
+def stlf_triangl(x, y, S):
+    sw = S/8
+    return ((x % (2*sw)) < sw) & (y >= x) 
+
+@register
+def strf_triangl(x, y, S):
+    sw = S/8
+    return ((x % (2*sw)) < sw) & ((S-y) >= x)
 
 @register
 def dbl_triangle(x, y, S):
@@ -262,6 +272,11 @@ def pinstripe(x, y, S):
     sw = S/30
     return (x % (3*sw)) < sw
 
+@register
+def inset_square(x, y, S):
+    h = S//4
+    edge = (x<h)|(S-h<x)|(y<h)|(S-h<y)
+    return (y >= x) ^ edge
 
 @register
 def triangle(x, y, S):
@@ -513,6 +528,8 @@ def desc(p: Param):
            sg.Checkbox('重ね書き', key='-ovw-',
                        default=bauhaus_preserv['overwrite']),
            sg.Text(size=(3,1)),
+           sg.Button('Load Pal.', key='-ld-', background_color='#ffffdd'),
+           sg.Button('Save Pal.', key='-sv-', background_color='#ffffdd'),
            sg.Text(key='-msg-', text_color='#550000', expand_x=True),
            sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
            sg.Button(' Done ', key='-ok-', background_color='#ddffdd'),
@@ -520,8 +537,10 @@ def desc(p: Param):
     #print(lo)
 
     touched = False
+    fname = 'default.pal'
     last_ovw = bauhaus_preserv['overwrite']
-    wn = sg.Window('mod Bauhaus', layout=lo, modal=True)
+
+    wn = sg.Window('mod Bauhaus', layout=lo)
     while True:
         ev, va = wn.read()
         wn['-msg-'].update('')
@@ -577,10 +596,24 @@ def desc(p: Param):
                 wn['en_'+name].update(False)
             touched = True
             continue
-
         elif ev == '-ovw-':
             if va['event_type'] == 'change':
                 bauhaus_preserv['overwrite'] = va['event']
+            continue
+        elif ev == '-ld-':
+            n_colors = fdi.load_palette(fname, 3)
+            if n_colors is None:
+                continue
+            p.color1 = RGBColor(n_colors[0])
+            p.color2 = RGBColor(n_colors[1])
+            p.color3 = RGBColor(n_colors[2])
+            fdi.flush_ev(wn)
+            touched = True
+            continue
+        elif ev == '-sv-':
+            colors = [to_rgb(p.color1), to_rgb(p.color2), to_rgb(p.color3)]
+            fname = fdi.save_palette(colors, mode='o')
+            fdi.flush_ev(wn)
             continue
 
     wn.close()

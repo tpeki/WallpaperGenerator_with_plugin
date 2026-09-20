@@ -7,6 +7,7 @@ import zipfile
 import re
 import fnmatch
 import TkEasyGUI as sg
+from wall_common import to_rgb, clip8
 
 def get_openfile(fname, filetypes='', init_dir='.'):
     """開く既存ファイル名を取得 filetypes省略時は[("PNG files", "*.png"),]"""
@@ -112,6 +113,10 @@ def sanitize_dirname(name):
     return drv+path
 
 
+def basename_wo_ext(fname):
+    return pa.splitext(pa.basename(fname))[0]
+
+
 def yn_dialog(title: str, message: str, buttontext: str = 'Ok'):
     """Cancel/Anyダイアログ
         デフォルトボタン表示テキスト = OK"""
@@ -197,3 +202,89 @@ def read_filez(filepath: str, add_zip=None):
                         break
 
     return lines if found else None
+
+
+# パレット保存/読出
+def save_palette(colors, init_dir='samples', encoding='sjis', mode='w'):
+    """colors [Color1, Color2,...], Color = (r,g,b) or '#rrggbb'
+       mode='w'rite or 'o'verwrite"""
+    fname = get_savefile('default.pal', filetypes=[('palette', '*.pal')],
+                             init_dir=init_dir)
+    if fname is None:
+        return None
+    if pa.exists(fname) and mode=='o':  # overwrite mode
+        old_colors = retrieve_colors(fname, 10, encoding)
+        if isinstance(old_colors, list): 
+           lc = len(colors)
+           lo = len(old_colors)
+           if ic < lo:
+               for n in range(lc, lo, 1):
+                   colors.append(old_colors[n])
+    try:
+        with open(fname, mode='w', encoding=encoding) as f:
+            f.write('[Colors]\n')
+            for i, c in enumerate(colors):
+                r,g,b = to_rgb(c)
+                f.write(f'Color{i}=({r},{g},{b})\n')
+        return fname
+    except Exception as e:
+        print('Error:', e)
+        return None
+
+
+def load_palette(fname='default.pal', max_num=10,
+                 init_dir='samples', encoding='sjis'):
+    """max_num <= 10, accept .pal/.ttn"""
+    filetypes = [('palette', '*.pal'),
+                 ('tartan set', '*.ttn')]
+    fname = get_openfile(fname, filetypes=filetypes,
+                             init_dir=init_dir)
+    if fname is None:
+        return None
+    colors = retrieve_colors(fname, max_num, encoding)
+
+    k = 255 //  max_num
+    for i in range(max_num):
+        if not isinstance(colors[i], tuple):
+            colors[i] = tuple((clip8(i*k),) * 3)
+
+    return colors
+
+def retrieve_colors(fname, max_num, encoding):
+    try:
+        with open(fname, mode='r', encoding=encoding) as f:
+            buf = f.read().splitlines()
+    except Exception as e:
+        print('Error:', e)
+        return None
+
+    p = 0
+    while True:
+        if buf[p].startswith('[Colors]'):
+            break
+        p += 1
+        if p == len(buf):
+            return None
+    p += 1
+    colors = ([None]* max_num)
+    c = 0
+    while True:
+        m = re.match(r'Color(\d+)=\(\s*(\d+),\s*(\d+),\s*(\d+)\)', buf[p])
+        if m:
+            cno = int(m.group(1))
+            r = int(m.group(2))
+            g = int(m.group(3))
+            b = int(m.group(4))
+            if 0<= cno <  max_num:
+                colors[cno] = (r,g,b)
+                c += 1
+                if c ==  max_num:
+                    break
+            else:
+                print(f'no match: {p[buf]}')
+                
+        p += 1
+        if p == len(buf):
+            break
+
+    return colors

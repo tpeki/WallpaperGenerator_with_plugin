@@ -211,8 +211,10 @@ def desc(p: Param):
            sg.Button('Dump', key='-dmp-', background_color='#ddddff'),
            sg.Button('Save', key='-sav-', background_color='#ddddff'),
            sg.Text('', expand_x=True),
-           sg.Button('Done', size=(4,1), key='-ok-',
-                     background_color='#ddffdd')
+           sg.Button('Cancel', size=(5,1), key='-can-',
+                     background_color='#ffdddd'),
+           sg.Button('Done', size=(5,1), key='-ok-',
+                     background_color='#ddffdd'),
            ]]
     wn = sg.Window(sprite_preserv['data'].name, layout=lo,
                    element_justification='right')
@@ -221,12 +223,14 @@ def desc(p: Param):
     while True:
         ev,va = wn.read()
         
-        if ev == sg.WINDOW_CLOSED or ev == '-ok-':
+        if ev in (sg.WINDOW_CLOSED, '-can-'):
+            modf = False
+            break
+        elif ev == '-ok-':
             if len(sprite_preserv['data'].sprites) > 0:
                 break
             continue
-        
-        if ev == '-fread-':
+        elif ev == '-fread-':
             fname = wn['-set-'].get()
             if fname == '':
                 continue

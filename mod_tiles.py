@@ -1,5 +1,6 @@
 from wall_common import *
 import numpy as np
+import os.path as pa
 from PIL import Image
 import inspect
 import TkEasyGUI as sg
@@ -253,10 +254,12 @@ def desc(p):
                                    default_color=oldc))
         if ci is not None:
             fgc, bgc = bg_and_font(ci)
-            wn[key].update(background_color=bgc, text_color=fgc,
-                           text=f'{ci[0]:02X}{ci[1]:02X}{ci[2]:02X}')
+            wn[key].update(text=bgc[1:], text_color=fgc, background_color=bgc)
         fdi.flush_ev(wn)
         return ci
+    def update_color_cell(color, key):
+        fgc,bgc = bg_and_font(color)
+        wn[key].update(text=bgc[1:], text_color=fgc, background_color=bgc)
 
     # tile spec
     common_sect = sg.Frame('Basic parameters',layout=[
@@ -274,9 +277,9 @@ def desc(p):
     cp1 = []
     cp2 = []
     for i in range(3):
-        cp1.append(sg.Text(f'{i+1}'))
+        cp1.append(sg.Text(f'{i+1}', width=1, text_align='right'))
         cp1.append(color_cell(colors[i], f'-c-{i}-'))
-        cp2.append(sg.Text(f' {i+3}'))
+        cp2.append(sg.Text(f' {i+4}', width=1, text_align='right'))
         cp2.append(color_cell(colors[i+3], f'-c-{i+3}-'))
     color_sect = sg.Frame('Color', layout=[
         cp1, cp2,
@@ -310,11 +313,15 @@ def desc(p):
         ], expand_x=True, expand_y=True)
 
     # Buttons
-    button_sect = [sg.Text(expand_x=True),
+    button_sect = [sg.Button('Load Palette', key='-ld-',
+                             background_color='#ffffdd'),
+                   sg.Button('Save Palette', key='-sv-',
+                             background_color='#ffffdd'),
+                   sg.Text('', key='-palname-', expand_x=True),
                    sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
                    sg.Button('Done', key='-ok-', background_color='#ddffdd'),
                    ]
-                   
+    palname = 'default.pal'
 
     lo = [[sg.Column([[color_sect],
                       [gradation_sect]]
@@ -349,6 +356,20 @@ def desc(p):
                     sh_c = ci
                 elif ev.startswith('-joint-'):
                     jc = ci
+        elif ev == '-ld-':
+            new_colors = fdi.load_palette(palname, MAX_COLORS)
+            if new_colors is None:
+                continue
+            colors = new_colors
+            for i, x in enumerate(colors):
+                update_color_cell(x, f'-c-{i}-')
+            fdi.flush_ev(wn)
+        elif ev == '-sv-':
+            fname = fdi.save_palette(colors)
+            if fname is not None:
+                wn['-palname-'].update(pa.basename(fname))
+                palname = fname
+            fdi.flush_ev(wn)
         elif ev == '-ok-':
             break
 
