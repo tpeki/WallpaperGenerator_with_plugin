@@ -222,19 +222,20 @@ def dot(size: int, color: tuple):
 
 @register
 def dot2(size: int, color: tuple):
+    colors = memphis_preserv['colors']
     pr = max(1, int(size/50))*AA*2
     r = int(pr*2)
     size = pr*6
     image = Image.new('RGBA', (size, size), 0)
     md = ImageDraw.Draw(image)
-    color1 = np.random.randint(0,len(COLORS))
-    color2 = np.random.randint(0,len(COLORS))
+    color1 = np.random.randint(0,len(colors))
+    color2 = np.random.randint(0,len(colors))
     if color1 == color2:
-        color2 = (color1 + 2) % len(COLORS)
+        color2 = (color1 + 2) % len(colors)
     
     #md.rectangle((0,0,size,size),fill=color)
-    md.circle((r+pr,r+pr), r, fill=COLORS[color2])
-    md.circle((r,r), r, fill=COLORS[color1])
+    md.circle((r+pr,r+pr), r, fill=colors[color2])
+    md.circle((r,r), r, fill=colors[color1])
 
     return image
 
@@ -975,8 +976,8 @@ def desc(p: Param):
         elif ev == '-palet-':
             ret = palette_subconf(p)
             fdi.flush_ev(wn)
-            print(ret)
-            print(to_rgb(p.color1))
+            # print(ret)
+            # print(to_rgb(p.color1))
         else:
             wn['-msg-'].update('')
 
@@ -1298,7 +1299,7 @@ def generate(p: Param):
 
         placed.append((px, py, r))
 
-    print(f"points={len(points)}, placed={len(placed)}")
+    # print(f"points={len(points)}, placed={len(placed)}")
 
     # =========================
     # 後処理
