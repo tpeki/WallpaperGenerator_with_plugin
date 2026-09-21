@@ -1,7 +1,9 @@
+from wall_common import *
+import os.path as pa
 import numpy as np
 from PIL import Image
 import TkEasyGUI as sg
-from wall_common import *
+import filedialog as fdi
 
 WIDTH = 1920
 HEIGHT = 1080
@@ -100,10 +102,14 @@ def desc(p):
                      ]
     button_section = [[sg.Text(''),],
                       [sg.Text(''),],
-                      [sg.Text('',expand_x=True),
+                      [sg.Button('Load Palette', key='-ld-', width=10,
+                                 background_color='#ffffdd'),
+                       sg.Button('Save Palette', key='-sv-', width=10,
+                                 background_color='#ffffdd'),
+                       sg.Text('',key='-fname-', expand_x=True),
                        sg.Button('Cancel', key='-can-',
                                  background_color='#ffdddd'),
-                       sg.Button('OK', key='-ok-',
+                       sg.Button('Done', key='-ok-',
                                  background_color='#ddffdd'),]
                       ]
     lo = [[sg.Column(base_colors_section, pad=(20,0)),
@@ -112,8 +118,18 @@ def desc(p):
            sg.Column(button_section, pad=(20,0), expand_x=True)],
           ]
     
-    wn = sg.Window('アーガイル設定', layout=lo)
+    def update_color(color, key):  # 色表示テキストの更新
+        fgc, bgc = bg_and_font(color)
+        wn[key].update(text=f'{to_rgb(color)}', text_color=fgc,
+                       background_color=bgc)
+    def scan_alpha():  # alphaの設定値をstitch_colorsに反映
+        for i in range(3):
+            v = stoi(wn[f'-stitch_{i+1}_3'].get())
+            stitch_colors[i][3] = v
 
+    wn = sg.Window('アーガイル設定', layout=lo)
+    palname = 'default.pal'
+    
     while True:
         ev, va = wn.read()
         #print(ev, va)
@@ -156,23 +172,46 @@ def desc(p):
                 except ValueError:
                     a = 255
                 stitch_colors[i+1] = (r,g,b,a)
+        elif ev == '-sv-':
+            scan_alpha()
+            tmp_colors = [*base_colors, *stitch_colors]
+            print(stitch_colors)
+            tmp_colors.append([stitch_colors[x][3] for x in range(3)])
+            fname = fdi.save_palette(tmp_colors)
+            if fname is not None:
+                wn['-fname-'].update(pa.basename(fname))
+                palname = fname
+            fdi.flush_ev(wn)
+        elif ev == '-ld-':
+            tmp_colors = fdi.load_palette(palname, 7)
+            if tmp_colors is None:
+                continue
+            base_colors = tmp_colors[0:3]
+            stitch_colors = tmp_colors[3:6]
+            for i in range(3):
+                update_color(base_colors[i], f'-base_{i+1}_1')
+                update_color(stitch_colors[i][:3], f'-stitch_{i+1}_1')
+                alpha = tmp_colors[6][i]
+                wn[f'-stitch_{i+1}_3'].update(alpha)
+                if len(stitch_colors[i]) < 4:
+                    stitch_colors[i] = (*stitch_colors[i], alpha)
+            fdi.flush_ev(wn)
 
     wn.close()
     if ev == '-can-' or ev == sg.WINDOW_CLOSED:
         return
 
-    p.color1, p.color2, p.color3 = base_colors
-
-    for i in range(3):
-        try:
-            alp = int(va[f'-stitch_{i+1}_3'])
-        except ValueError:
-            alp = 255
-        if alp != stitch_colors[i][3]:
-            stitch_colors[i] = (*stitch_colors[i][:3], alp)
+    for i in range(3):  # p.color1 - p.color2
+        t = base_colors[i]
+        setattr(p, f'color{i+1}',
+                t if isinstance(t, RGBColor) else RGBColor(t))
+        alpha = stoi(va[f'-stitch_{i+1}_3'])
+        if not isinstance(alpha, int):
+            alpha = 255
+        stitch_colors[i] = (*stitch_colors[i][:3], clip8(alpha))
+        
     argyle_preserv['stitch_color'] = [[stitch_colors[_][__]
                                        for __ in range(4)] for _ in range(3)]
-    
     params = []
     for i in range(3):
         try:

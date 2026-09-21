@@ -212,8 +212,13 @@ def save_palette(colors, init_dir='samples', encoding='sjis', mode='w'):
                              init_dir=init_dir)
     if fname is None:
         return None
+    return store_palette(fname, colors, init_dir, encoding, mode)
+
+# 強制save
+def store_palette(fname, colors, init_dir='samples', encoding='sjis',
+                  mode='w'):
     if pa.exists(fname) and mode=='o':  # overwrite mode
-        old_colors = retrieve_colors(fname, 10, encoding)
+        old_colors = retrieve_palette(fname, 10, encoding)
         if isinstance(old_colors, list): 
            lc = len(colors)
            lo = len(old_colors)
@@ -224,7 +229,7 @@ def save_palette(colors, init_dir='samples', encoding='sjis', mode='w'):
         with open(fname, mode='w', encoding=encoding) as f:
             f.write('[Colors]\n')
             for i, c in enumerate(colors):
-                r,g,b = to_rgb(c)
+                r,g,b = to_rgb(c)[:3]
                 f.write(f'Color{i}=({r},{g},{b})\n')
         return fname
     except Exception as e:
@@ -241,7 +246,7 @@ def load_palette(fname='default.pal', max_num=10,
                              init_dir=init_dir)
     if fname is None:
         return None
-    colors = retrieve_colors(fname, max_num, encoding)
+    colors = retrieve_palette(fname, max_num, encoding)
 
     k = 255 //  max_num
     for i in range(max_num):
@@ -250,7 +255,8 @@ def load_palette(fname='default.pal', max_num=10,
 
     return colors
 
-def retrieve_colors(fname, max_num, encoding):
+# 強制load (補完なし)
+def retrieve_palette(fname, max_num, encoding):
     try:
         with open(fname, mode='r', encoding=encoding) as f:
             buf = f.read().splitlines()
@@ -269,7 +275,7 @@ def retrieve_colors(fname, max_num, encoding):
     colors = ([None]* max_num)
     c = 0
     while True:
-        m = re.match(r'Color(\d+)=\(\s*(\d+),\s*(\d+),\s*(\d+)\)', buf[p])
+        m = re.match(r'Color(\d+)=\(\s*(\d+),\s*(\d+),\s*(\d+).*\)', buf[p])
         if m:
             cno = int(m.group(1))
             r = int(m.group(2))

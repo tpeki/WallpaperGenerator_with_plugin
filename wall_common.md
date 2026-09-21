@@ -255,7 +255,65 @@
   - filepath のファイルを一括読み込み (戻り値はsplitlines/SJISされたバッファ)
   - filepath -> dir、name として、dir/add_zip、 ,\\add_zip も検索する 
 
+- load_palette(fname='default.pal', max_num=10,  init_dir='samples', encoding='sjis'):
 
+  - ファイルからのパレット読み込み 戻り値は読み込んだ色リスト もしくは None
+
+  - fnameでデフォルトファイル名を指定、また読み込むべき色数をmax_numで指定
+
+  - パレットファイルに指定した数の色データが含まれなかった場合、max_num段階のグレースケールの該当階調のグレーが補完される
+
+  - 読込ファイルタイプは *.pal, *.ttn  (.ttnも前半にパレットデータを持つ)
+
+  - init_dirで初期ディレクトリを指定。またパレットファイルのエンコーディングはsjisとするが、encodingを指定することもできる
+
+  - パレットファイルのフォーマット
+
+    | **区分**           | **記述**                                          |
+    | ------------------ | ------------------------------------------------- |
+    | **パレットヘッダ** | **[Colors]**                                      |
+    | **データ**         | **Color<n>=(<r>,  <g>,  <b>)**                    |
+    |                    | (例) Color1=(255, 221, 127)                       |
+    |                    | Color行は **0 <= <n> <max_num** なデータのみ読込  |
+    |                    | (r,g,b,a) も許容するが a は無視する。             |
+    |                    | また ) の後は無視するのでコメントを記載しても良い |
+
+  - 利用例
+
+  -     import filedialog as fdi
+        
+        		new_colors = fdi.load_palette(palname, MAX_COLORS)
+                if new_colors is None:
+                    continue
+                colors = new_colors
+                for i, x in enumerate(colors):  # 読み込んだ色を画面反映
+                    update_color_cell(x, f'-c-{i}-')
+                fdi.flush_ev(wn)  # ダイアログを開いたあとは入力フラッシュ
+
+- save_palette(colors, init_dir='samples', encoding='sjis', mode='w'):
+
+  - colorsで指定した色データを保存する（ファイル名はダイアログで指定)
+
+  - 戻り値は保存ファイル名、もしくは None (キャンセル/エラー)
+
+  - colors には、 [ (r,g,b), (r,g,b), ...] という3値タプルのリストを渡す (内部でto_rgb()を掛けているため、'#rrggbb' 形式も許容)
+
+  - mode='w' では、指定したデータのみを出力。mode='o'では、元のファイルを読み込んだ後、色リストに渡されたcolorsを上書きしてファイルに出力する。モジュールによって保持している色数が異なるため、上書きモードを推奨。
+
+  - init_dir, encodingはloadに同じ。
+
+  - 利用例
+
+  -     import filedialog as fdi
+        
+                fname = fdi.save_palette(colors)
+                if fname is not None:  # 書き込んだファイル名を画面反映
+                    wn['-palname-'].update(pa.basename(fname))
+                    palname = fname
+                fdi.flush_ev(wn)  # ダイアログを開いたあとは入力フラッシュ
+
+- retrieve_palette(fname, max_num, encoding)  強制読出(未定義パレットの補完なし)
+- store_palette(fname, colors, init_dir, encoding, mode)  強制保存
 
 ## ■ winwall.py
 
