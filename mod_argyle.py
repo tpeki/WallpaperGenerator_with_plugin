@@ -101,10 +101,10 @@ def desc(p):
                       sg.Input(f'{params[2]}', key='-bas3-', size=(4,1))],
                      ]
     button_section = [[sg.Text(''),],
-                      [sg.Text(''),],
                       [sg.Button('Load Palette', key='-ld-', width=10,
                                  background_color='#ffffdd'),
-                       sg.Button('Save Palette', key='-sv-', width=10,
+                       sg.Text('', expand_x=True),],
+                      [sg.Button('Save Palette', key='-sv-', width=10,
                                  background_color='#ffffdd'),
                        sg.Text('',key='-fname-', expand_x=True),
                        sg.Button('Cancel', key='-can-',
