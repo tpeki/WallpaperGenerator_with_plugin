@@ -11,7 +11,6 @@ SCALE = 100
 ANGLE = 0
 
 photo_preserv = {'file_name': ''}
-Cache = {'file':'', 'image':[]}
 
 def intro(modlist: Modules, module_name):
     '''module基本情報'''
@@ -30,37 +29,25 @@ def default_param(p: Param):
     return p
 
 
-def prevset(name, value):
-    if name in photo_preserv:
-        return photo_preserv[name]
-    else:
-        return value
-
-
 def image_open(file, fallback=(800,600), bg='gray'):
-    if Cache['file'] == file:
-       im = Cache['image']
-    else:
-        try:
-            im = Image.open(file)
-        except Image.UnidentifiedImageError:
-            im = None
+    try:
+        im = Image.open(file)
+    except Image.UnidentifiedImageError:
+        im = None
 
     if im is None and isinstance(fallback, tuple):
         im = Image.new('RGB', fallback, bg)
 
-    Cache['file'] = file
-    Cache['image'] = im
     return im
 
 
 # 詳細設定
 def desc(p):
     W,H = p.width, p.height
-    oldc = prevset('bgc', p.color1.ctoi())
-    ang = prevset('angle', p.pheight)
-    scl = prevset('scale', p.pwidth)
-    fgc,bgstr = bg_and_font(oldc)
+    oldc = get_hist('bgc', p.color1.ctoi())
+    ang = get_hist('angle', p.pheight)
+    scl = get_hist('scale', p.pwidth)
+    fgc,bgc = bg_and_font(oldc)
     oldf = photo_preserv['file_name']
     if not pa.exists(oldf):
         oldf = ''
@@ -71,8 +58,8 @@ def desc(p):
            sg.Button('...', key='-fget-', background_color='#ffffdd')
            ],
           [sg.Text('BGColor'),
-           sg.Button(bgstr, key='-bgc-', text_color=fgc,
-                     background_color=rgb_string(p.color1)),
+           sg.Button(bgc[1:], key='-bgc-', text_color=fgc,
+                     background_color=bgc),
            sg.Text(width=2),
            sg.Text('Angle'),
            sg.Input(ang, width=4, key='-angle-'),
@@ -99,14 +86,13 @@ def desc(p):
             break
         elif ev == '-bgc-':
             nc = sg.popup_color('Backdrop color', oldc, format='tuple')
-            fdi.flush_ev(wn)
             if nc != oldc:
-                fgc, bgstr = bg_and_font(nc)
-                wn['-bgc-'].update(background_color=rgb_string(nc),
-                                   text_color=fgc, text=bgstr)
+                fgc, bgc = bg_and_font(nc)
+                wn['-bgc-'].update(text=bgc[1:],
+                                   text_color=fgc, background_color=bgc)
                 oldc = to_rgb(nc)
-                wn.refresh()
-
+            fdi.flush_ev(wn)
+            
         elif ev == '-fget-':
             idir = pa.dirname(oldf)
             if idir == '':
@@ -119,14 +105,21 @@ def desc(p):
                 im = image_open(fname, fallback=(W,H))
                     
                 sw, sh = im.size
-                ang = int(stoi(va['-angle-'], default=0) % 360)
+                ang = stoi(wn['-angle-'].get(), default=0) % 360
                 oldf = fname
                 wn['-fname-'].update(pa.basename(oldf))
-                ang = int(stoi(va['-angle-'], default=0) % 360)
                 rw, rh = calc_scale_inscribed(W, H, sw, sh, ang)
                 scl = max(rw, rh) *100.0
                 wn['-scale-'].update(scl)
-            wn.refresh()
+        
+        elif ev == '-fit-':
+            if pa.exists(oldf):
+                im = image_open(oldf, fallback=(W,H))
+                sw, sh = im.size
+                ang = stoi(va['-angle-'], default=0) % 360
+                rw, rh = calc_scale_inscribed(W, H, sw, sh, ang)
+                scl = min(rw, rh) *100.0
+                wn['-scale-'].update(scl)
         elif ev == '-full-':
             if pa.exists(oldf):
                 im = image_open(oldf, fallback=(W,H))
@@ -135,21 +128,18 @@ def desc(p):
                 rw, rh = calc_scale_inscribed(W, H, sw, sh, ang)
                 scl = max(rw, rh) *100.0
                 wn['-scale-'].update(scl)
-        elif ev == '-fit-':
-            if pa.exists(oldf):
-                im = image_open(oldf, fallback=(W,H))
-                sw, sh = im.size
-                ang = int(stoi(va['-angle-'], default=0) % 360)
-                rw, rh = calc_scale_inscribed(W, H, sw, sh, ang)
-                scl = min(rw, rh) *100.0
-                wn['-scale-'].update(scl)
+                
         elif ev == '-ok-':
             break
+
+        wn.refresh()
 
     wn.close()
     
     if ev == '-ok-':
-        scl = stoi(va['-scale-'], lo=1E-8)
+        scl = stoi(wn['-scale-'].get(), lo=1E-8)
+        ang = stoi(wn['-angle-'].get())
+        
         photo_preserv['file_name'] = oldf
         photo_preserv['scale'] = scl
         p.pwidth = scl
@@ -176,18 +166,26 @@ def calc_scale_inscribed(W, H, w1, h1, d):
     #r = max(W / Win, H / Hin)
     return W / Win, H / Hin
 
+
+def get_hist(atname, default):
+    if atname in photo_preserv:
+        return photo_preserv[atname]
+    else:
+        photo_preserv[atname] = default
+        return default
+    
         
 # wallpaper 共通エントリ
 def generate(p: Param):
     """イメージファイル読み込み"""
-
     W, H = p.width, p.height
+
     bgcolor = p.color1.ctoi()
     scale = p.pwidth  #相対値, 100=余白無し・アスペクト維持で画像をload
     angle = p.pheight  # degree(整数)を指定
 
     file_name = photo_preserv['file_name']
-
+    
     if not pa.exists(file_name):
         fixed_image = Image.new('RGBA', (W, H), bgcolor)
     else:
@@ -201,7 +199,7 @@ def generate(p: Param):
         syr = max(1, int(sy*sr))
         rimage = img.resize((sxr, syr), resample=Image.LANCZOS)
         rimage = rimage.rotate(angle, resample=Image.BICUBIC,
-                               expand=True, fillcolor=(0,0,0,0))
+                               expand=True, fillcolor=bgcolor)
         pw, ph = rimage.size
         px, py = (W-pw)//2, (H-ph)//2
 

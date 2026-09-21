@@ -682,8 +682,8 @@ def generate(p: Param):
     if joint_color is None:
         joint_color = set_hist('color', 'joint', (jb,)*3)
     else:
-        jb = clip8(sum(joint_color)/3)
-        p.sub_jitter = jb
+        if jb != clip8(sum(joint_color)/3):
+            joint_color = set_hist('color', 'joint', (jb,)*3)
     
     joint_grain = get_hist('grain', 'joint', JOINT_GRAIN)
     int_bdr = get_hist('border', 'joint', INT_BDR, lo=0, hi=255)

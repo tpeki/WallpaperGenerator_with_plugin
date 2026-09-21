@@ -120,7 +120,8 @@ def desc(p):
     
     def update_color(color, key):  # 色表示テキストの更新
         fgc, bgc = bg_and_font(color)
-        wn[key].update(text=f'{to_rgb(color)}', text_color=fgc,
+        r,g,b = to_rgb(color)
+        wn[key].update(text=f'{r},{g},{b}', text_color=fgc,
                        background_color=bgc)
     def scan_alpha():  # alphaの設定値をstitch_colorsに反映
         for i in range(3):

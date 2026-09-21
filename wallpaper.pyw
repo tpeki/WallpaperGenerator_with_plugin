@@ -613,14 +613,10 @@ def gui_main(modlist: Modules, mods, param: Param,
             # print( widg )
             if not is_param(widg):
                 continue
-            try:
-                s = int(wn[ev].get(),10)
-            except ValueError:
-                s = 0
             if hasattr(param, widg):
-                t = int(getattr(param, widg))
-                if s != t:
-                    setattr(param, widg, s)
+                v = int(stoi(wn[ev].get(), default=0))
+                setattr(param, widg, v)
+                wn[ev].update(v)
             else:
                 print('has no attr', ev, 'as', widg)
 
@@ -634,6 +630,7 @@ def gui_main(modlist: Modules, mods, param: Param,
 result_q = queue.Queue()
 
 def long_task(param, modules, modname):
+    # print(param)
     image = modules[modname].generate(param)
     result_q.put(image)
 
