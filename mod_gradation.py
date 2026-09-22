@@ -206,6 +206,7 @@ def desc(p):
             if nc != cc:
                 colors[n-1] = nc
                 change_color(colors)
+                cur_pal = INTERNAL
         elif ev.startswith('-sc_'):
             s = ev[4:-1]
             sno = sum(i+1 if x[0] == s else 0 for i,x in enumerate(Scheme))
@@ -233,19 +234,27 @@ def desc(p):
             if fname is not None:
                 cur_pal = pa.splitext(pa.basename(fname))[0]
                 wn['-fname-'].update(cur_pal)
-                pal_items = update_pal_items()
+                pal_items = update_pal_items()  # プルダウン更新
                 wn['-pal-'].update(values=pal_items, value=cur_pal)
+                set_hist('palette', cur_pal)  # 現在のパレット名更新
+                pset = get_hist('palette_set')  # キャッシュからは削除
+                if cur_pal in pset and cur_pal not in Palette_set.keys():
+                    pset.pop(cur_pal)
+                set_hist('palette_set', pset)
+                    
+                
 
         # print(ev, va, wn['-pal-'].get())
 
     wn.close()
     if ev == '-ok-':
+        set_hist('palette', cur_pal)
         s = va['-scheme-']
         if s.startswith('-sc_'):
             s = s[4:-1]
         sno = sum(i+1 if x[0] == s else 0 for i,x in enumerate(Scheme))
-        scheme = sno - 1 if sno > 0 else Default_scheme  #
-        gradation_preserv['scheme'] = scheme
+        scheme = sno - 1 if sno > 0 else Default_scheme 
+        set_hist('scheme', scheme)
 
         #print(va)
         #print(f'{scheme}: {Scheme[scheme][0]}')
@@ -315,6 +324,7 @@ def update_pal_items(directory=DATA_DIR, zfile=ZIP_FILE):
 
 def get_pal(palette_name):
     pset = get_hist('palette_set')
+    #print(palette_name, '\n', pset)
     if palette_name in pset:
         pal = pset[palette_name]
     elif palette_name in get_hist('found_pal'):
