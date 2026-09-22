@@ -3,6 +3,10 @@ import numpy as np
 from PIL import Image
 import TkEasyGUI as sg
 import filedialog as fdi
+import glob
+import os
+import os.path as pa
+
 
 # 外部定数
 START_COLOR = (100, 100, 230)
@@ -21,14 +25,32 @@ Scheme = [
     ['2rad', '2colors Radial', 2,   True,   True,     True ],  # 3
     ['shpe', 'Shaped Radial' , 2,   False,  True,     True ],  # 4
     ]
+
+Palette_set = {'Asayake': ['#6464e6', '#17531c', '#e07836'],
+               'Bondi':   ['#0cd8aa', '#21a78f', '#76ecef'],
+               'Green':   ['#8eb92b', '#1f6000', '#3aad3a'],
+               'Pinky':   ['#e877f4', '#ff7dbe', '#e6e6e6'],
+               'Sands':   ['#e4d8a5', '#c2aa6b', '#dbc7ac'],
+               'Sunflower':   ['#2d7bfd', '#fff74d', '#413cff'],
+             }
+
 Default_scheme = 2
+Default_palette = 'Asayake'
+
+DATA_DIR = 'samples'
+ZIP_FILE = 'gradation.zip'
 Cdis = '#f0f0f0'
 Csel = '#ffffdd'
 Nsel = Cdis
 Chdr = '#989898'
+INTERNAL = '*GUI*'  # internal palette name must include '*'
 
 # 不揮発変数
-gradation_preserv = {'scheme': Default_scheme}
+gradation_preserv = {'scheme': Default_scheme,
+                     'palette': Default_palette,
+                     'palette_set': Palette_set,
+                     'found_pal': []
+                     }
 
 def intro(modlist: Modules, module_name):
     '''module基本情報'''
@@ -42,64 +64,133 @@ def intro(modlist: Modules, module_name):
 
 def default_param(p: Param):
     '''おすすめパラメータ'''
-    p.color1.itoc(*START_COLOR)
-    p.color2.itoc(*END_COLOR)
-    p.color3.itoc(*MID_COLOR)
+    pal = Palette_set['Asayake']
+    p.color1 = RGBColor(Palette_set['Asayake'][0])  # Start
+    p.color2 = RGBColor(Palette_set['Asayake'][1])  # End
+    p.color3 = RGBColor(Palette_set['Asayake'][2])  # Midpoint
     p.pwidth = ANGLE
     p.pheight = MIDDLE_POINT1
     p.pdepth = MIDDLE_POINT2
     return p
 
 
+def get_hist(attr):
+    if attr in gradation_preserv:
+        return gradation_preserv[attr]
+def set_hist(attr, v):
+    if attr in gradation_preserv:
+        gradation_preserv[attr] = v
+        return v
+    return None
+
+
 # 詳細設定
 def desc(p):
+    def cbutton(n):
+        r,g,b = to_rgb(colset[n][0])
+        return sg.Button(f'{r},{g},{b}', key=f'-col{n+1}-', width=10,
+                     text_color=colset[n][1], background_color=colset[n][0])
+
+    def change_color(palette):
+        """palette = [color1, color2, color3]"""
+        for n in range(3):
+            color = palette[n]
+            r,g,b = to_rgb(color)
+            fgc, bgc = bg_and_font(color)
+            colsno = [0,2,1][n]
+            colset[colsno] = [bgc, fgc]
+
+            wn[f'-col{n+1}-'].update(text=f'{r},{g},{b}',
+                                     text_color=fgc, background_color=bgc)
+
+        cpattern = [[colset[0][0], Cdis, Cdis],
+                    [colset[0][0], colset[2][0], Cdis],
+                    [colset[0][0], colset[2][0], colset[1][0]]]
+        for sno in range(len(Scheme)):
+            sc = Scheme[sno]
+            if 0< sc[2] < 4:
+                cpat = cpattern[sc[2]-1]
+            else:
+                cpat = [Cdis,Cdis,Cdis]
+
+            for n in range(3):
+                wn[f'-c{n+1}_s{sno}-'].update(background_color=cpat[n])
+
+    def pcolor_to_current():
+        colors = [rgb_string(p.color1),
+                  rgb_string(p.color2), rgb_string(p.color3)]  # start, mid, end
+        return INTERNAL, colors
+        
+    # desc本体
+    cur_pal = get_hist('palette')
+    tmp_colors = get_pal(cur_pal)
+    if tmp_colors is None:
+        cur_pal, tmp_colors = pcolor_to_current()
+    colors = tmp_colors.copy()
+    
     colset = []
     for x in range(3):
-        bg = getattr(p, f'color{x+1}')
-        fg, bg = bg_and_font(bg)
+        fg, bg = bg_and_font(colors[x])
         colset.append([bg, fg])
         
-    init_sc = gradation_preserv['scheme']
+    init_sc = get_hist('scheme')
     if len(Scheme) <= init_sc or init_sc < 0:
         init_sc = 2
     angle = p.pwidth
     mid1 = min(max(p.pheight, 0), 100)  # 中間位置1(相対位置を%で指定)
     mid2 = min(max(p.pdepth, 0), 100)  # 中間位置2(相対位置を%で指定)
 
-    lines =  [scheme_selector(n, colset, True if n == init_sc else False)
-              for n in range(len(Scheme))]
-    
-    lo = [[sg.Text(size=(2,1)),sg.Text(size=(14,1)),
-           sg.Text('S Color',size=(6,1)),
-           sg.Text('M Color',size=(6,1)),
-           sg.Text('E Color',size=(6,1)),
-           sg.Text('Angle',  size=(6,1)),
-           sg.Text('Mid1',   size=(6,1)),
-           sg.Text('Mid2',   size=(6,1)),
-           ],
-          [sg.Text(size=(2,1)),
-           sg.Text('Scheme', size=(14,1), background_color=Chdr,
-                   text_color='white'),
-           sg.Button(f'{colset[0][0]}', key='-col1-', size=(6,1),
-                     text_color=colset[0][1], background_color=colset[0][0]),
-           sg.Button(f'{colset[2][0]}', key='-col3-', size=(6,1),
-                     text_color=colset[2][1], background_color=colset[2][0]),
-           sg.Button(f'{colset[1][0]}', key='-col2-', size=(6,1),
-                     text_color=colset[1][1], background_color=colset[1][0]),
-           sg.Input(f'{angle}', key='-angl-', size=(6,1)),
-           sg.Input(f'{mid1}', key='-mid1-', size=(6,1)),
-           sg.Input(f'{mid2}', key='-mid2-', size=(6,1)),
-           ],
-          *lines,
-          [sg.Text('',expand_x=True),
-           sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
-           sg.Button('Set ok', key='-ok-', background_color='#ddffdd'),
-           ]
+    sheme_sect =  [scheme_selector(n, colset, True if n == init_sc else False)
+                   for n in range(len(Scheme))]
+
+    header_sect = [sg.Text(width=2), sg.Text(width=14),
+                   sg.Text('Start', width=10),
+                   sg.Text('Midpoint', width=10),
+                   sg.Text('End', width=10),
+                   sg.Text('Angle', width=6),
+                   sg.Text('Mid1', width=6),
+                   sg.Text('Mid2', width=6),
+                   ]
+
+    top_sect = [sg.Text(width=2),
+                sg.Text('Scheme', width=14, background_color=Chdr,
+                        text_color='white'),
+                cbutton(0),
+                cbutton(2),
+                cbutton(1),
+                sg.Input(f'{angle}', key='-angl-', width=6),
+                sg.Input(f'{mid1}', key='-mid1-', width=6),
+                sg.Input(f'{mid2}', key='-mid2-', width=6),
+                ]
+
+    pal_items = update_pal_items()
+    button_sect=[sg.Text(width=2),
+                 sg.Text('Load Palette', background_color='#ffffdd'),
+                 sg.Combo(values=pal_items, default_value=cur_pal,
+                          enable_events=True, key='-pal-', readonly=True,
+                          width=9),
+                 sg.Text(' '),
+                 sg.Button('Save Palette', key='-sv-',
+                           background_color='#ffffdd'),
+                 sg.Text('', key='-fname-', expand_x=True),
+                 sg.Button('Cancel', key='-can-', width=5,
+                           background_color='#ffdddd'),
+                 sg.Button('Done', key='-ok-', width=5,
+                           background_color='#ddffdd'),
+                 ]
+
+    lo = [header_sect,
+          top_sect,
+          *sheme_sect,
+          button_sect
           ]
 
-    wn = sg.Window('', lo)
+    wn = sg.Window('Gradation config', lo)
     while True:
+        fdi.flush_ev(wn)
         ev,va = wn.read()
+
+        #print(ev, f'{colors}, pal={cur_pal}\n', get_hist('palette_set')['Asayake'])
 
         if ev in ('-can-', sg.WINDOW_CLOSED):
             ev = '-can-'
@@ -108,21 +199,13 @@ def desc(p):
             break
         elif ev.startswith('-col'):
             n = int(ev[4])
-            cc = colset[n-1][0]
+            # print(n, rgb_string(colors[n-1]))
+            cc = colors[n-1]
             nc = sg.popup_color(f'Select Color{n}', cc, format='tuple')
             fdi.flush_ev(wn)
             if nc != cc:
-                fg, bg = bg_and_font(nc)
-                colset[n-1] = [bg, fg]
-                wn[f'-col{n}-'].update(background_color=bg, text_color=fg,
-                                      text=f'{bg}')
-                for i in range(len(Scheme)):
-                    fl = Scheme[i][2] + 1
-                    bb = bg if n < fl else Cdis 
-                    print(f'-c{n}_s{i}- background={bb} {fl}')
-                    wn[f'-c{n}_s{i}-'].update(background_color=bb)
-                wn.refresh()
-
+                colors[n-1] = nc
+                change_color(colors)
         elif ev.startswith('-sc_'):
             s = ev[4:-1]
             sno = sum(i+1 if x[0] == s else 0 for i,x in enumerate(Scheme))
@@ -131,6 +214,29 @@ def desc(p):
                 c = Csel if i == scs else Nsel
                 wn[f'-sct_s{i}-'].update(background_color=c)
             wn.refresh()
+        elif ev == '-pal-':
+            tmp_colors = get_pal(va['-pal-'])
+            if tmp_colors == None:
+                cur_pal, tmp_colors = pcolor_to_current()
+                print(colors)
+                wn['-pal-'].update(value=cur_pal)
+            else:
+                cur_pal = va['-pal-']
+            colors = tmp_colors.copy()
+            change_color(colors)
+            if cur_pal != INTERNAL:
+                set_hist('palette', cur_pal)
+            #print('-- end pal --')
+        elif ev == '-sv-':
+            fname = fdi.save_palette(colors, init_dir=DATA_DIR, mode='o')
+            fdi.flush_ev(wn)
+            if fname is not None:
+                cur_pal = pa.splitext(pa.basename(fname))[0]
+                wn['-fname-'].update(cur_pal)
+                pal_items = update_pal_items()
+                wn['-pal-'].update(values=pal_items, value=cur_pal)
+
+        # print(ev, va, wn['-pal-'].get())
 
     wn.close()
     if ev == '-ok-':
@@ -149,7 +255,8 @@ def desc(p):
         mid2 = stoi(va['-mid2-'], lo=0, hi=100)
 
         for x in range(3):
-            setattr(p, f'color{x+1}', RGBColor(colset[x][0]))
+            xx = [0,1,2][x]
+            setattr(p, f'color{x+1}', RGBColor(colors[xx]))
         p.pwidth = angl
         p.pheight = mid1
         p.pdepth = mid2
@@ -157,14 +264,13 @@ def desc(p):
         return generate(p)
     else:
         return
-        
 
 
 def scheme_selector(sno, cols, default):
     sc = Scheme[sno]
-    cpat = [[cols[0][0],Cdis,Cdis],
-            [cols[0][0],Cdis,cols[1][0]],
-            [cols[0][0],cols[2][0],cols[1][0]]]
+    cpat = [[cols[0][0], Cdis, Cdis],
+            [cols[0][0], cols[1][0], Cdis],
+            [cols[0][0], cols[1][0], cols[2][0]]]
     if 0< sc[2] < 4:
         cpat = cpat[sc[2]-1]
     else:
@@ -174,17 +280,59 @@ def scheme_selector(sno, cols, default):
                      default=default),  #enable_events=True
             sg.Text(f'{sc[1]}', size=(14,1), key=f'-sct_s{sno}-',
                     background_color=Csel if default else Nsel),
-            sg.Button('',key=f'-c1_s{sno}-', size=(6,1),
-                      text_color=Cdis, background_color=cpat[0]),
-            sg.Button('',key=f'-c3_s{sno}-', size=(6,1),
-                      text_color=Cdis, background_color=cpat[1]),
-            sg.Button('',key=f'-c2_s{sno}-', size=(6,1),
-                      text_color=Cdis, background_color=cpat[2]),
-            sg.Text('○' if sc[3] else '×', key=f'-angl_s{sno}-', size=(6,1)),
-            sg.Text('○' if sc[4] else '×', key=f'-midl_s{sno}-', size=(6,1)),
-            sg.Text('○' if sc[5] else '×', key=f'-mid2_s{sno}-', size=(6,1)),
+            sg.Button('', key=f'-c1_s{sno}-', width=10,
+                      background_color=cpat[0], disabled=True),
+            sg.Button('', key=f'-c3_s{sno}-', width=10,
+                      background_color=cpat[2], disabled=True),
+            sg.Button('', key=f'-c2_s{sno}-', width=10,
+                      background_color=cpat[1], disabled=True),
+            sg.Text('○' if sc[3] else '×', key=f'-angl_s{sno}-', width=6),
+            sg.Text('○' if sc[4] else '×', key=f'-midl_s{sno}-', width=6),
+            sg.Text('○' if sc[5] else '×', key=f'-mid2_s{sno}-', width=6),
             ]
     return line
+
+    
+def palfile_list(directory=DATA_DIR, zfile=ZIP_FILE):
+    patn = directory+pa.sep+'*.pal'
+    files = [fn.replace('.pal','') \
+             for fn in fdi.glob_filelistz(patn, add_zip=zfile)]
+    return files
+
+
+def update_pal_items(directory=DATA_DIR, zfile=ZIP_FILE):
+    flist = palfile_list(directory, zfile)
+    set_hist('found_pal', flist)
+
+    pal_items = list(Palette_set.keys())
+    pal_items.extend(flist)
+    pal_items = list(dict.fromkeys(pal_items))
+    pal_items.sort()
+
+    pal_items.append(INTERNAL)
+    return pal_items
+
+
+def get_pal(palette_name):
+    pset = get_hist('palette_set')
+    if palette_name in pset:
+        pal = pset[palette_name]
+    elif palette_name in get_hist('found_pal'):
+        pal = load_pal(palette_name)
+        if pal is not None:
+            gradation_preserv['palette_set'][palette_name] = pal
+    else:
+        pal = None
+
+    return pal
+    
+
+def load_pal(file):
+    file = fdi.sanitize_filename(file, ext='.pal')
+    file = DATA_DIR + pa.sep + file
+    source = fdi.read_filez(file, add_zip=ZIP_FILE)
+
+    return fdi.decode_palette(source, 3)
     
 
 # 三色リニアグラデーション

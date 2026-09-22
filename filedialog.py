@@ -219,21 +219,24 @@ def store_palette(fname, colors, init_dir='samples', encoding='sjis',
                   mode='w'):
     if pa.exists(fname) and mode=='o':  # overwrite mode
         old_colors = retrieve_palette(fname, 10, encoding)
-        if isinstance(old_colors, list): 
+        if isinstance(old_colors, list):
+           old_colors = [x for x in old_colors if x is not None]
            lc = len(colors)
            lo = len(old_colors)
-           if ic < lo:
-               for n in range(lc, lo, 1):
-                   colors.append(old_colors[n])
+           if lc < lo:
+               for n in range(lo-lc):
+                   colors.append(old_colors[n+lc])
     try:
         with open(fname, mode='w', encoding=encoding) as f:
             f.write('[Colors]\n')
             for i, c in enumerate(colors):
-                r,g,b = to_rgb(c)[:3]
-                f.write(f'Color{i}=({r},{g},{b})\n')
+                if c is not None:
+                    r,g,b = to_rgb(c)[:3]
+                    f.write(f'Color{i}=({r},{g},{b})\n')
         return fname
     except Exception as e:
         print('Error:', e)
+        print(colors, i, c)
         return None
 
 
@@ -264,6 +267,9 @@ def retrieve_palette(fname, max_num, encoding):
         print('Error:', e)
         return None
 
+    return decode_palette(buf, max_num)
+
+def decode_palette(buf, max_num):
     p = 0
     while True:
         if buf[p].startswith('[Colors]'):
