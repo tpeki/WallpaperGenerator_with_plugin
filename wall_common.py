@@ -49,35 +49,64 @@ def stoi(s, default=0, lo=None, hi=None, multi=False):
     return ret
 
 
+def rgb_string(*args):
+    """文字列、タプル、RGBColorの値を'#rrggbb'に変換"""
+    x = args[0] if len(args)==1 else args
+    if isinstance(x, str):
+        try:
+            _ = ImageColor.getrgb(x)
+            return x
+        except ValueError:
+            return None
+    rgb = to_rgb(x)
+    if rgb is None:
+        return None
+    else:
+        s = '#'
+        for d in rgb[:min(len(rgb),4)]:
+            s += f'{d:02X}'
+        return s
+
+
+def to_rgb(*args):
+    """文字列、タプル、RGBColorの値を(r,g,b)に変換"""
+    x = args[0] if len(args)==1 else args
+    if isinstance(x,(list,tuple)):
+        if len(x)==3:
+            return tuple(clip8(int(t,0))
+                         if isinstance(t,str) else clip8(int(t))
+                         for t in x[:3])
+        elif len(x)==4:
+            return tuple(clip8(int(t,0))
+                         if isinstance(t,str) else clip8(int(t))
+                         for t in x[:4])
+    elif isinstance(x,str):
+        try:
+            return ImageColor.getrgb(x)
+        except ValueError:
+            return None
+    elif isinstance(x, RGBColor):
+        return x.ctoi()
+    else:
+        return None
+
+
 class RGBColor:
     """色を格納するクラス"""
     def __init__(self, *args):
-        self.r, self.g, self.b = self._parse(args)
-
-    @staticmethod
-    def _parse(args):
-        # RGBColors((r,g,b))
-        if len(args) == 1 and isinstance(args[0], (tuple, list)):
-            r,g,b = args[0][:3]
-
-        # RGBColors(r,g,b)
-        elif len(args) >= 3:
-            r,g,b = args[:3]
-
-        # RGBColors('#rrggbb')
-        elif len(args) == 1 and isinstance(args[0], str) and len(args[0]) >= 6:
-            s = args[0]
-            if s.startswith('#'):
-                s = s[1:]
-            r,g,b = (int(s[i*2:i*2+2], 16) for i in range(3))
-
+        l = len(args) 
+        if l == 3 or l == 4:
+            val = args
+        elif l == 1:
+            val = args[0]
         else:
-            raise ValueError('Invalid color format')
-            
-        if not all(isinstance(x, int) for x in (r,g,b)):
-            raise ValueError('Parameters must be integer')
+            raise ValueError('Invalid argument format')
 
-        return clip8(r), clip8(g), clip8(b)
+        rgb =  to_rgb(val)
+        if rgb is None:
+            raise ValueError('Invalid color format')
+
+        self.r, self.g, self.b = rgb[:3]
 
     def ctox(self):
         return f'#{self.r & 0xff:02x}{self.g & 0xff:02x}{self.b & 0xff:02x}'
@@ -359,48 +388,6 @@ def diagonal_gradient_rgb(width, height, cstart, cend):
 #   image = diagonal_gradient_rgb_np(width, height,
 #                                    bg_start, bg_end)
 #   draw = ImageDraw.Draw(image)
-
-
-def rgb_string(*args):
-    """文字列、タプル、RGBColorの値を'#rrggbb'に変換"""
-    x = args[0] if len(args)==1 else args
-    if isinstance(x, str):
-        try:
-            _ = ImageColor.getrgb(x)
-            return x
-        except ValueError:
-            return None
-    rgb = to_rgb(x)
-    if rgb is None:
-        return None
-    else:
-        s = '#'
-        for d in rgb[:min(len(rgb),4)]:
-            s += f'{d:02X}'
-        return s
-
-
-def to_rgb(*args):
-    """文字列、タプル、RGBColorの値を(r,g,b)に変換"""
-    x = args[0] if len(args)==1 else args
-    if isinstance(x,(list,tuple)):
-        if len(x)==3:
-            return tuple(clip8(int(t,0))
-                         if isinstance(t,str) else clip8(int(t))
-                         for t in x[:3])
-        elif len(x)==4:
-            return tuple(clip8(int(t,0))
-                         if isinstance(t,str) else clip8(int(t))
-                         for t in x[:4])
-    elif isinstance(x,str):
-        try:
-            return ImageColor.getrgb(x)
-        except ValueError:
-            return None
-    elif isinstance(x, RGBColor):
-        return x.ctoi()
-    else:
-        return None
 
 
 def get_pos(event_str: str):

@@ -3,8 +3,6 @@ import numpy as np
 from PIL import Image
 import TkEasyGUI as sg
 import filedialog as fdi
-import glob
-import os
 import os.path as pa
 
 
@@ -26,7 +24,7 @@ Scheme = [
     ['shpe', 'Shaped Radial' , 2,   False,  True,     True ],  # 4
     ]
 
-Palette_set = {'Asayake': ['#6464e6', '#17531c', '#e07836'],
+Palette_set = {'Asayake': ['#183068', '#1f6000', '#e07836'],
                'Bondi':   ['#0cd8aa', '#21a78f', '#76ecef'],
                'Green':   ['#8eb92b', '#1f6000', '#3aad3a'],
                'Pinky':   ['#e877f4', '#ff7dbe', '#e6e6e6'],
@@ -48,7 +46,7 @@ INTERNAL = '*GUI*'  # internal palette name must include '*'
 # 不揮発変数
 gradation_preserv = {'scheme': Default_scheme,
                      'palette': Default_palette,
-                     'palette_set': Palette_set,
+                     'palette_set': Palette_set.copy(),
                      'found_pal': []
                      }
 
@@ -64,10 +62,10 @@ def intro(modlist: Modules, module_name):
 
 def default_param(p: Param):
     '''おすすめパラメータ'''
-    pal = Palette_set['Asayake']
-    p.color1 = RGBColor(Palette_set['Asayake'][0])  # Start
-    p.color2 = RGBColor(Palette_set['Asayake'][1])  # End
-    p.color3 = RGBColor(Palette_set['Asayake'][2])  # Midpoint
+    pal = Palette_set[Default_palette]
+    p.color1 = RGBColor(pal[0])  # Start
+    p.color2 = RGBColor(pal[1])  # End
+    p.color3 = RGBColor(pal[2])  # Midpoint
     p.pwidth = ANGLE
     p.pheight = MIDDLE_POINT1
     p.pdepth = MIDDLE_POINT2
@@ -75,8 +73,8 @@ def default_param(p: Param):
 
 
 def get_hist(attr):
-    if attr in gradation_preserv:
-        return gradation_preserv[attr]
+    return gradation_preserv.get(attr)
+
 def set_hist(attr, v):
     if attr in gradation_preserv:
         gradation_preserv[attr] = v
@@ -147,9 +145,9 @@ def desc(p):
                    sg.Text('Start', width=10),
                    sg.Text('Midpoint', width=10),
                    sg.Text('End', width=10),
-                   sg.Text('Angle', width=6),
-                   sg.Text('Mid1', width=6),
-                   sg.Text('Mid2', width=6),
+                   sg.Text('Angle', width=4),
+                   sg.Text('Mid1', width=4),
+                   sg.Text('Mid2', width=4),
                    ]
 
     top_sect = [sg.Text(width=2),
@@ -158,10 +156,24 @@ def desc(p):
                 cbutton(0),
                 cbutton(2),
                 cbutton(1),
-                sg.Input(f'{angle}', key='-angl-', width=6),
-                sg.Input(f'{mid1}', key='-mid1-', width=6),
-                sg.Input(f'{mid2}', key='-mid2-', width=6),
+                sg.Input(f'{angle}', key='-angl-', width=4),
+                sg.Input(f'{mid1}', key='-mid1-', width=4),
+                sg.Input(f'{mid2}', key='-mid2-', width=4),
                 ]
+
+    func_sect = [[sg.Text('')],
+                 [sg.Button('Revert', key='-frevt-', width=5,
+                            background_color='#ddddff')],
+                 [sg.Button('M <> E', key='-fswap-', width=5,
+                            background_color='#ddddff')],
+                 [sg.Button('S -> E', key='-fcopy-', width=5,
+                            background_color='#ddddff')],
+                 [sg.Button('Dim', key='-fdimm-', width=5,
+                            background_color='#ddddff')],
+                 [sg.Button('Bright', key='-fbrgt-', width=5,
+                            background_color='#ddddff')],
+                 [sg.Text(expand_y=True)]]
+                 
 
     pal_items = update_pal_items()
     button_sect=[sg.Text(width=2),
@@ -178,10 +190,12 @@ def desc(p):
                  sg.Button('Done', key='-ok-', width=5,
                            background_color='#ddffdd'),
                  ]
+    left_part = sg.Column(layout=[header_sect,
+                                  top_sect,
+                                  *sheme_sect,])
+    right_part = sg.Column(layout=func_sect, expand_y=True)
 
-    lo = [header_sect,
-          top_sect,
-          *sheme_sect,
+    lo = [[left_part, right_part],
           button_sect
           ]
 
@@ -209,8 +223,9 @@ def desc(p):
                 cur_pal = INTERNAL
         elif ev.startswith('-sc_'):
             s = ev[4:-1]
-            sno = sum(i+1 if x[0] == s else 0 for i,x in enumerate(Scheme))
-            scs = sno - 1
+            # sno = sum(i+1 if x[0] == s else 0 for i,x in enumerate(Scheme))
+            # scs = sno - 1
+            scs = scheme_index(s)
             for i in range(len(Scheme)):
                 c = Csel if i == scs else Nsel
                 wn[f'-sct_s{i}-'].update(background_color=c)
@@ -219,7 +234,6 @@ def desc(p):
             tmp_colors = get_pal(va['-pal-'])
             if tmp_colors == None:
                 cur_pal, tmp_colors = pcolor_to_current()
-                print(colors)
                 wn['-pal-'].update(value=cur_pal)
             else:
                 cur_pal = va['-pal-']
@@ -238,11 +252,36 @@ def desc(p):
                 wn['-pal-'].update(values=pal_items, value=cur_pal)
                 set_hist('palette', cur_pal)  # 現在のパレット名更新
                 pset = get_hist('palette_set')  # キャッシュからは削除
-                if cur_pal in pset and cur_pal not in Palette_set.keys():
+                if (cur_pal in pset) and\
+                   (cur_pal not in Palette_set.keys()):
                     pset.pop(cur_pal)
                 set_hist('palette_set', pset)
-                    
-                
+        elif ev == '-frevt-':
+            nc = colors[0]
+            colors[0] = colors[1]
+            colors[1] = nc
+            change_color(colors)
+            cur_pal = INTERNAL
+        elif ev == '-fswap-':
+            nc = colors[1]
+            colors[1] = colors[2]
+            colors[2] = nc
+            change_color(colors)
+            cur_pal = INTERNAL
+        elif ev == '-fcopy-':
+            colors[1] = colors[0]
+            change_color(colors)
+            cur_pal = INTERNAL
+        elif ev == '-fdimm-':
+            for i in range(3):
+                colors[i] = to_rgb(brightness(RGBColor(colors[i]), f=0.9))
+            change_color(colors)
+            cur_pal = INTERNAL
+        elif ev == '-fbrgt-':
+            for i in range(3):
+                colors[i] = to_rgb(brightness(RGBColor(colors[i]), f=1.1))
+            change_color(colors)
+            cur_pal = INTERNAL
 
         # print(ev, va, wn['-pal-'].get())
 
@@ -252,9 +291,9 @@ def desc(p):
         s = va['-scheme-']
         if s.startswith('-sc_'):
             s = s[4:-1]
-        sno = sum(i+1 if x[0] == s else 0 for i,x in enumerate(Scheme))
-        scheme = sno - 1 if sno > 0 else Default_scheme 
-        set_hist('scheme', scheme)
+        # sno = sum(i+1 if x[0] == s else 0 for i,x in enumerate(Scheme))
+        # scheme = sno - 1 if sno > 0 else Default_scheme 
+        set_hist('scheme', scheme_index(s))
 
         #print(va)
         #print(f'{scheme}: {Scheme[scheme][0]}')
@@ -295,13 +334,20 @@ def scheme_selector(sno, cols, default):
                       background_color=cpat[2], disabled=True),
             sg.Button('', key=f'-c2_s{sno}-', width=10,
                       background_color=cpat[1], disabled=True),
-            sg.Text('○' if sc[3] else '×', key=f'-angl_s{sno}-', width=6),
-            sg.Text('○' if sc[4] else '×', key=f'-midl_s{sno}-', width=6),
-            sg.Text('○' if sc[5] else '×', key=f'-mid2_s{sno}-', width=6),
+            sg.Text('○' if sc[3] else '×', key=f'-angl_s{sno}-', width=4),
+            sg.Text('○' if sc[4] else '×', key=f'-midl_s{sno}-', width=4),
+            sg.Text('○' if sc[5] else '×', key=f'-mid2_s{sno}-', width=4),
             ]
     return line
 
     
+def scheme_index(name):
+    for i, sc in enumerate(Scheme):
+        if sc[0] == name:
+            return i
+    return Default_scheme
+
+
 def palfile_list(directory=DATA_DIR, zfile=ZIP_FILE):
     patn = directory+pa.sep+'*.pal'
     files = [fn.replace('.pal','') \
@@ -378,13 +424,11 @@ def radial(W, H, color1, color2, mid1=None, mid2=None, angle=90):
     if mid1 is None:
         cx = W / 2
     else:
-        mid1 = min(max(mid1, 0), 100)
-        cx = int(W*mid1/100)
+        cx = W * mid1/100
     if mid2 is None:
         cy = H / 2
     else:
-        mid2 = min(max(mid2, 0), 100)
-        cy = int(H*mid2/100)
+        cy = H * mid2/100
 
     angle_rad = np.deg2rad(angle-90)
     cos_a = np.cos(angle_rad)
@@ -412,36 +456,28 @@ def shaped(W, H, color1, color2, mid1=None, mid2=None):
     if mid1 is None:
         cx = W / 2
     else:
-        mid1 = min(max(mid1, 0), 100)
-        cx = int(W*mid1/100)
+        cx = W * mid1/100
     if mid2 is None:
         cy = H / 2
     else:
-        mid2 = min(max(mid2, 0), 100)
-        cy = int(H*mid2/100)
+        cy = H * mid2/100
 
     y, x = np.ogrid[:H, :W]
 
     dx = np.abs(x - cx)
     dy = np.abs(y - cy)
 
-    rx = max(cx, W - 1 - cx)
-    ry = max(cy, H - 1 - cy)
+    rx = max(1, max(cx, W - 1 - cx))
+    ry = max(1, max(cy, H - 1 - cy))
 
     # Lp距離
     p = 6
-    d = (
-        (dx / rx) ** p +
-        (dy / ry) ** p
-    ) ** (1 / p)
+    d = ((dx / rx) ** p + (dy / ry) ** p) ** (1 / p)
 
     # 外周を1にする
-    edge = (
-        (rx / rx) ** p +
-        (ry / ry) ** p
-    ) ** (1 / p)
-
+    edge = 2 ** (1 / p)  # = ((rx/rx)**p + (ry/ry)**p) ** (1/p) 
     d /= edge
+    
     d = np.clip(d, 0.0, 1.0)
 
     c1 = np.asarray(color1, dtype=float)
