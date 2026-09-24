@@ -1053,6 +1053,11 @@ def palette_subconf(p):
               sg.Button('Save', key='-sv-', width=4,
                         background_color='#ddddff'),
               sg.Text('', key='-fname-', expand_x=True, width=12),
+              sg.Button('Dim', key='-fdim-', width=5,
+                        text_color='#ffffff', background_color='#6666dd'),
+              sg.Button('Bright', key='-fbri-', width=5,
+                        text_color='#ffffff', background_color='#6666dd'),
+              sg.Text('  '),
               sg.Button('Cancel', key='-can-', width=6,
                         background_color='#ffdddd'),
               sg.Button('Done', key='-ok-', width=6,
@@ -1099,6 +1104,17 @@ def palette_subconf(p):
             for i in range(8):
                 update_color_cell(colors[i], f'-c-{i}-')
             continue
+        elif ev == '-fdim-':
+            for i in  range(6):
+                colors[i+2] =  to_rgb(brightness(colors[i+2], f=0.9))
+                update_color_cell(colors[i+2], f'-c-{i+2}-')
+            continue
+        elif ev == '-fbri-':
+            for i in  range(6):
+                colors[i+2] =  to_rgb(brightness(colors[i+2], f=1.1))
+                update_color_cell(colors[i+2], f'-c-{i+2}-')
+            continue
+            
 
     wn.close()
     if ev == '-ok-':

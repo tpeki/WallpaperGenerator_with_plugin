@@ -247,10 +247,13 @@ def load_palette(fname='default.pal', max_num=10,
                  ('tartan set', '*.ttn')]
     fname = get_openfile(fname, filetypes=filetypes,
                              init_dir=init_dir)
-    if fname is None:
+    if fname is None or fname == '':
         return None
     colors = retrieve_palette(fname, max_num, encoding)
+    if colors is None:
+        return None
 
+    # 欠損をグレーで補完
     k = 255 //  max_num
     for i in range(max_num):
         if not isinstance(colors[i], tuple):
@@ -270,6 +273,7 @@ def retrieve_palette(fname, max_num, encoding):
     return decode_palette(buf, max_num)
 
 def decode_palette(buf, max_num):
+    """パレットテキストの読み込み -> (r,g,b) × max_num個のlist of tuple"""
     p = 0
     while True:
         if buf[p].startswith('[Colors]'):

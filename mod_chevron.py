@@ -85,6 +85,7 @@ def desc(p: Param):
         ev, va = wn.read()
 
         if ev == '-can-' or ev == sg.WINDOW_CLOSED:
+            gradv = -1
             break
         if ev == '-ok-':
             grad = va['-grad-']

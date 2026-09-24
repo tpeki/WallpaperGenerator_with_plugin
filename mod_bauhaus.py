@@ -529,6 +529,9 @@ def desc(p: Param):
                        default=bauhaus_preserv['overwrite']),
            sg.Text(size=(3,1)),
            sg.Button('Load Pal.', key='-ld-', background_color='#ffffdd'),
+           sg.Image(key='-pcolor1-', size=(15,15)),
+           sg.Image(key='-pcolor2-', size=(15,15)),
+           sg.Image(key='-pcolor3-', size=(15,15)),
            sg.Button('Save Pal.', key='-sv-', background_color='#ffffdd'),
            sg.Text(key='-msg-', text_color='#550000', expand_x=True),
            sg.Button('Cancel', key='-can-', background_color='#ffdddd'),
@@ -541,6 +544,13 @@ def desc(p: Param):
     last_ovw = bauhaus_preserv['overwrite']
 
     wn = sg.Window('mod Bauhaus', layout=lo)
+
+    jitter = p.color_jitter
+    for i in range(3):
+        wn[f'-pcolor{i+1}-'].update(
+            source=color_indicator(getattr(p, f'color{i+1}'),
+                                   jitter if i < 2 else 0))
+
     while True:
         ev, va = wn.read()
         wn['-msg-'].update('')
@@ -604,9 +614,11 @@ def desc(p: Param):
             n_colors = fdi.load_palette(fname, 3)
             if n_colors is None:
                 continue
-            p.color1 = RGBColor(n_colors[0])
-            p.color2 = RGBColor(n_colors[1])
-            p.color3 = RGBColor(n_colors[2])
+            for i in range(3):
+                c = n_colors[i]
+                setattr(p, f'color{i+1}', RGBColor(c))
+                wn[f'-pcolor{i+1}-'].update(
+                    source=color_indicator(c, jitter if i < 2 else 0))
             fdi.flush_ev(wn)
             touched = True
             continue
@@ -625,6 +637,22 @@ def desc(p: Param):
         return
 
 
+def color_indicator(color, delta, size=15):
+    r,g,b = to_rgb(color)
+    c2 = np.array([clip8(r+delta),
+                   clip8(g+delta),
+                   clip8(b+delta)], dtype=np.uint8)
+    c1 = np.array([r,g,b], dtype=np.uint8)
+
+    y, x = np.ogrid[:size, :size]
+    img = np.empty((size,size,3), np.uint8)
+    mask = x < (size - y)
+
+    img[mask] = c1
+    img[~mask] = c2
+    return Image.fromarray(img)
+
+    
 # =========================
 # 描画色生成
 # =========================
