@@ -7,7 +7,7 @@ import filedialog as fdi
 import numpy as np
 from PIL import Image, ImageFilter, ImageChops, ImageOps
 from wall_common import *
-import sub_sprites as sps
+from plugins import sub_sprites as sps
 
 # --- 定数設定 ---
 PATTERN_SIZE = 4

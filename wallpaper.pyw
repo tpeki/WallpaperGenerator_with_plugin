@@ -22,6 +22,7 @@ import queue
 import filedialog as fdi
 import winwall
 
+PLUGIN_DIR = 'plugins'
 DEFAULT_MODULE = 'stripe'
 IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
@@ -35,7 +36,7 @@ def search_modules(modlist: Modules, plugin_dir):
     modules = {}
 
     if plugin_dir is None:
-        plugin_dir = pa.dirname(__file__)  # directory part
+        plugin_dir = pa.join(pa.dirname(__file__), PLUGIN_DIR) # directory part
     plugin_pat = 'mod_*.py'  # filename pattern
     
     for modf in glob.glob(plugin_pat, root_dir=plugin_dir):
@@ -43,7 +44,8 @@ def search_modules(modlist: Modules, plugin_dir):
         if modname.startswith('mod_'):
             modname = modname[4:]
         
-        spec = impl.spec_from_file_location(modname, modf)
+        modpath = pa.abspath(pa.join(plugin_dir, modf))
+        spec = impl.spec_from_file_location(modname, modpath)
         module = impl.module_from_spec(spec)
         sys.modules[modname] = module
         spec.loader.exec_module(module)
@@ -60,7 +62,7 @@ def search_aftereffects(efxlist: EfxModules, plugin_dir):
     aftereffects = {}
 
     if plugin_dir is None:
-        plugin_dir = pa.dirname(__file__)  # directory part
+        plugin_dir = pa.join(pa.dirname(__file__), PLUGIN_DIR)  # directory part
     plugin_pat = 'efx_*.py'  # filename pattern
     
     for modf in glob.glob(plugin_pat, root_dir=plugin_dir):
@@ -68,7 +70,8 @@ def search_aftereffects(efxlist: EfxModules, plugin_dir):
         if modname.startswith('efx_'):
             modname = 'AE_'+modname[4:]
         
-        spec = impl.spec_from_file_location(modname, modf)
+        modpath = pa.abspath(pa.join(plugin_dir, modf))
+        spec = impl.spec_from_file_location(modname, modpath)
         module = impl.module_from_spec(spec)
         sys.modules[modname] = module
         spec.loader.exec_module(module)
@@ -150,7 +153,7 @@ def search_aftereffects(efxlist: EfxModules, plugin_dir):
 def layout(modlist, efxlist):
     #x = ['AE_'+item for item in efxlist.modules]
     x = [item for item in efxlist.modules]
-    menudef = [['File', ['Reload Palette', 'Stock Palette',
+    menudef = [['File', ['Configure', 'Load Palette', 'Save Palette',
                          '---', 'Save', 'Exit']],
                ['Module', modlist.modules],
                ['BackGround', ['Hold', 'Clear', 'Load BG', 'Unhold']],
@@ -371,6 +374,13 @@ def update_preview(param, image, wn):
             break
     return scale, cropos
 
+def update_color(wn, cno, color, param):
+    rgbc = RGBColor(color)
+    fgc, bgc = bg_and_font(color)
+    r,g,b = to_rgb(color)
+    setattr(param, f'color{cno}', rgbc)
+    wn[f'-color{cno}-1'].update(text=f'{r:d},{g:d},{b:d}', text_color=fgc,
+                                background_color=bgc)
 
 def load_bgimage(p):
     Ftypes = [('Image file','*.png *.jpg *.bmp *.gif'),('Any','*.*'),]
@@ -530,6 +540,7 @@ def gui_main(modlist: Modules, mods, param: Param,
         elif ev in modlist.modules:
             modname = ev
             set_module(wn, modlist, modname)
+            param.clean()
             param.pattern = modname
             param.savefile = ''
             mods[ev].default_param(param)
@@ -538,6 +549,23 @@ def gui_main(modlist: Modules, mods, param: Param,
             image = get_image_thread(wn, param, mods, modname)
             scale, cropos = update_preview(param, image, wn)
             continue
+        elif ev == 'Load Palette':
+            tmp_colors = fdi.load_palette('default_pal', 3)
+            if tmp_colors is None:
+                continue
+            for i, c in enumerate(tmp_colors):
+                if f'color{i+1}' in modlist.mod_gui[modname]:
+                    update_color(wn, i+1, c, param)
+            fdi.flush_ev(wn)
+        elif ev == 'Save Palette':
+            tmp_colors = []
+            for i in range(3):
+                if f'color{i+1}' in modlist.mod_gui[modname]:
+                    tmp_colors.append(getattr(param, f'color{i+1}').ctoi())
+            fname = fdi.save_palette(tmp_colors, mode='o')
+            #if fname is not None:
+            #    print(f'palette saved to {fname}; {tmp_colors}')
+            fdi.flush_ev(wn)
         elif ev == 'Hold':
             param.keep(modname, image)
             continue
@@ -597,7 +625,8 @@ def gui_main(modlist: Modules, mods, param: Param,
                 wn[ev[:-1]+'1'].update(f'{r},{g},{b}',text_color=fg,
                                        background=bg)
             continue            
-        elif ev == '-img-' and va['event_type'] == 'mousedown':
+        elif (ev == '-img-' and va['event_type'] == 'mousedown') or\
+             (ev == 'Configure'):
             # print('-img-', ev, va)
             set_window_geom(param, wn)
             # print(param.wwidth, param.wheight, param.wposx, param.wposy)
@@ -607,6 +636,8 @@ def gui_main(modlist: Modules, mods, param: Param,
                     image = retv
                     scale, cropos = update_preview(param, image, wn)
                     set_param(wn, param, modlist.mod_gui[modname])
+            else:
+                sg.popup('No additional configures')
             continue
         elif isinstance(ev, str):
             widg = ev[1:-2]
@@ -716,11 +747,15 @@ if __name__ == '__main__':
 
     # if winwall.is_windows():
     #     winwall.cache_cleanup()
+
+    plugin_dir = PLUGIN_DIR
+    if args.plugin_dir is not None:
+        plugin_dir = args.plugin_dir
     
     modlist = Modules()
-    mods = search_modules(modlist, args.plugin_dir)
+    mods = search_modules(modlist, plugin_dir)
     efxlist = EfxModules()
-    efxs = search_aftereffects(efxlist, args.plugin_dir)
+    efxs = search_aftereffects(efxlist, plugin_dir)
 
     param = Param()
     

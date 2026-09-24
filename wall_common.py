@@ -161,6 +161,13 @@ class Param:
     h_img = None  # hold image
     h_state = {}  # hold state
 
+    def clean(self):
+        for item in PARAMVALS:
+            if item.startswith('color'):
+                setattr(self, item, RGBColor(0,0,0))
+            else:
+                setattr(self, item, 0)
+
     def file_name(self):
         if len(self.savefile) < 1:
             self.savefile = self.pattern+'.png'
