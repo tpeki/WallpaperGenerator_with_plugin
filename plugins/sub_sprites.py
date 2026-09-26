@@ -723,7 +723,7 @@ def create_spr(spriteset, directory):
     trans = (0,0,0)
     pcols = []
    
-    wn = sg.Window('Import bitmap', layout=lo,)
+    wn = sg.Window('Import bitmap', layout=lo)
 
     while True:
         ev,va = wn.read()

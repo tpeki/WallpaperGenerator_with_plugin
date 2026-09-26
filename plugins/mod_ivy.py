@@ -339,7 +339,7 @@ def desc_(p: Param, slo, flo, glo, rec):
                ['gfn', 'grid', ivy_preserv['grid']]
                ]
 
-    wn = sg.Window('mod_ivy config', layout=lo)
+    wn = sg.Window('ivy config', layout=lo)
 
     while True:
         ev, va = wn.read()

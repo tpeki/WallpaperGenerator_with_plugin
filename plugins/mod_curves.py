@@ -528,7 +528,7 @@ def desc(p):
          [sg.Text('then try less iteration-depth or thin width.',
                   pad=1, text_color='#333388')
           ]]
-    wn = sg.Window('Curves', layout=lo)
+    wn = sg.Window('Curves conf', layout=lo)
     mod = False
 
     while True:

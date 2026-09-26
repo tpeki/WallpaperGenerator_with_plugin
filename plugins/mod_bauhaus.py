@@ -543,7 +543,7 @@ def desc(p: Param):
     fname = 'default.pal'
     last_ovw = bauhaus_preserv['overwrite']
 
-    wn = sg.Window('mod Bauhaus', layout=lo)
+    wn = sg.Window('Bauhaus config', layout=lo)
 
     jitter = p.color_jitter
     for i in range(3):

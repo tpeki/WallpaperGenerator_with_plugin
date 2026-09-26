@@ -128,7 +128,7 @@ def desc(p):
             v = stoi(wn[f'-stitch_{i+1}_3'].get())
             stitch_colors[i][3] = v
 
-    wn = sg.Window('アーガイル設定', layout=lo)
+    wn = sg.Window('Argyle config', layout=lo)
     palname = 'default.pal'
     
     while True:

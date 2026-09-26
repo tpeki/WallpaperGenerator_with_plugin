@@ -29,16 +29,25 @@ IMAGE_HEIGHT = 1080
 SAVE_NUM = 3
 PREVIEW_SIZE = (640,360)
 
+_Button = sg.Button
+sg.Button = lambda text, **k: _Button(
+    text, **{**{'use_ttk_buttons': False}, **k}
+)
+
+
 # ----
 # プラグインモジュール検索
 # ----
 def search_modules(modlist: Modules, plugin_dir):
     modules = {}
 
-    if plugin_dir is None:
-        plugin_dir = pa.join(pa.dirname(__file__), PLUGIN_DIR) # directory part
+    if not pa.isabs(plugin_dir):
+        plugin_dir = pa.join(get_basedir(), plugin_dir)
     plugin_pat = 'mod_*.py'  # filename pattern
     
+    #print(f'plugin_dir = {plugin_dir}')
+    #print(f'plugin files = {glob.glob(plugin_pat, root_dir=plugin_dir)}')
+
     for modf in glob.glob(plugin_pat, root_dir=plugin_dir):
         modname = pa.splitext(modf)[0]
         if modname.startswith('mod_'):
@@ -61,8 +70,8 @@ def search_modules(modlist: Modules, plugin_dir):
 def search_aftereffects(efxlist: EfxModules, plugin_dir):
     aftereffects = {}
 
-    if plugin_dir is None:
-        plugin_dir = pa.join(pa.dirname(__file__), PLUGIN_DIR)  # directory part
+    if not pa.isabs(plugin_dir):
+        plugin_dir = pa.join(get_basedir(), plugin_dir)
     plugin_pat = 'efx_*.py'  # filename pattern
     
     for modf in glob.glob(plugin_pat, root_dir=plugin_dir):
@@ -163,8 +172,8 @@ def layout(modlist, efxlist):
     color_column_layout = [
         [sg.Text('Base Color:', key='-color1-0', size=(8,1)),
          sg.Text('0,0,0', key='-color1-1', size=(9,1)),
-         sg.Button('...', key='-color1-2'),
-         sg.Button('?', key='-color1-3')],
+         sg.Button('...', key='-color1-2', use_ttk_buttons=False),
+         sg.Button('?', key='-color1-3', use_ttk_buttons=False)],
         [sg.Text('Second Color:', key='-color2-0', size=(8,1)),
          sg.Text('0,0,0', key='-color2-1', size=(9,1)),
          sg.Button('...', key='-color2-2'),

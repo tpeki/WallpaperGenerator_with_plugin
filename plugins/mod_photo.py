@@ -77,7 +77,7 @@ def desc(p):
            ]
           ]
  
-    wn = sg.Window('', lo)
+    wn = sg.Window('Photo config', layout=lo)
     while True:
         ev,va = wn.read()
 

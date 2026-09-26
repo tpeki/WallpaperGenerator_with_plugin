@@ -5,6 +5,7 @@ import re
 import copy
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageColor
+import sys
 import os.path as pa
 import colorsys
 
@@ -408,4 +409,15 @@ def get_pos(event_str: str):
 
     return (mouse_x, mouse_y)
 
+
+# pyinstallerで固めても大丈夫なbasedir設定
+def get_basedir():
+    if getattr(sys, 'frozen', False):
+        base_dir = pa.dirname(pa.abspath(sys.executable))
+        if base_dir not in sys.path:
+            sys.path.insert(0, base_dir)
+    else:
+        base_dir = pa.dirname(pa.abspath(__file__))
+
+    return base_dir
 

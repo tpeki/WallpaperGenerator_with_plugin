@@ -151,7 +151,7 @@ def desc(p: Param):
                               background_color='#ddffdd'),
                     ]
                    ])
-    wn = sg.Window('Configure', layout=layout, modal=True)
+    wn = sg.Window('Polkadot config', layout=layout)
 
     while True:
         ev, va = wn.read()

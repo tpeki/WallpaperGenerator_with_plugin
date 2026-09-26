@@ -203,7 +203,7 @@ def desc(p):
           button_sect
           ]
 
-    wn = sg.Window('Gradation config', lo)
+    wn = sg.Window('Gradation config', layout=lo)
     while True:
         fdi.flush_ev(wn)
         ev,va = wn.read()

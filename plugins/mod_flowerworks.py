@@ -151,7 +151,7 @@ def desc(p: Param):
            sg.Button('Apply', key='-ok-', background_color='#ddffdd'),
            ]]
 
-    wn = sg.Window('Config', layout=lo, modal=True)
+    wn = sg.Window('Flowerworks config', layout=lo)
     wn['-orad-'].update(f'{p.pwidth}')
     wn['-style-'].update(f'{p.pdepth}')
     fs = (p.pdepth+50)//20

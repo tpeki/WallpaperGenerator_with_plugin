@@ -594,7 +594,7 @@ def efx(image, p: Param):
 
     sample = add_stripe(fgimg, mask_name, bgimg) 
    
-    wn = sg.Window('Add Flavor', layout=lo)
+    wn = sg.Window('Add lines', layout=lo)
     
     while True:
         wn['-timg-'].update(data=sample)

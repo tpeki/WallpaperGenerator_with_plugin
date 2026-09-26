@@ -335,7 +335,7 @@ def desc(p):
           button_sect
           ]
 
-    wn = sg.Window('Test', layout=lo)
+    wn = sg.Window('Tiles config', layout=lo)
     while True:
         ev, va = wn.read()
 
@@ -437,6 +437,12 @@ def update_colors(p):
 
     return colors
 
+def clip(x, lo=None, hi=None):
+    if lo is not None:
+        x = max(x, lo)
+    if hi is not None:
+        x = min(x, hi)
+    return x
 
 # ---
 # タイルの質感設定 (拡張可)
@@ -467,9 +473,9 @@ def scratched(s: Surface,
     # エラー除け
     dx0, dx1 = s.dx
     dy0, dy1 = s.dy
-    pitch = (dx1-dx0)/np.clip(s.pitch, 1, 100)
-    grain = np.clip(s.grain, min=0)
-    dens = np.clip(s.density, min=0)
+    pitch = (dx1-dx0)/clip(s.pitch, 1, 100)
+    grain = clip(s.grain, lo=0)
+    dens = clip(s.density, lo=0)
     
     # ラインテクスチャ
     offset = np.random.rand() * pitch
@@ -497,7 +503,7 @@ def groove(s: Surface,
 
     num = max(1, int(s.num))
     groove_width = max(1, int(ew/(num+1) * s.width/100))
-    bwidth = np.clip(s.bottom/100, min=0, max=1-1E-5)
+    bwidth = clip(s.bottom/100, lo=0, hi=1-1E-5)
     dark = 1-s.depth/100
     slope = 0.9 - dark
     #print( f'{w}{s.dx}, {h}{s.dy}' )

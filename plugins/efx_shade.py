@@ -788,7 +788,7 @@ def efx(image, p: Param):
     sample = add_silhouette(init_fgimg, mask_name, bgimg,
                             shift=shift, alpha=alpha, blur=blur, adjbri=adjbri) 
    
-    wn = sg.Window('Add Flavor', layout=lo)
+    wn = sg.Window('Add shade', layout=lo)
     
     while True:
         wn['-timg-'].update(data=sample)

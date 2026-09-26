@@ -300,7 +300,7 @@ Canvas_data = {'x': 0, 'y': 0,
 def desc(p: Param):
 
     wn = sg.Window('Tartan-Set Editor', layout=layout(),
-                   resizable=True, finalize=True)  # , modal=True)
+                   resizable=True, finalize=True)
 
     def on_click(event, method=None):
         Canvas_data['x'], Canvas_data['y'] = event.x, event.y
