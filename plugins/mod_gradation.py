@@ -1,3 +1,6 @@
+if __name__ == '__main__':
+    import _4debug
+
 from wall_common import *
 import numpy as np
 from PIL import Image
@@ -16,12 +19,13 @@ MIDDLE_POINT2 = 50
 
 # 内部定数
 Scheme = [
-    #type 0  /Desc 1     /colors 2/Angle 3 /Mid1 4   /Mid2 5
-    ['flat', 'Flat plain'    , 1,   False,  False,    False],  # 0
-    ['2gra', '2colors Linear', 2,   True,   True,     False],  # 1
-    ['3gra', '3colors Linear', 3,   True,   True,     False],  # 2
-    ['2rad', '2colors Radial', 2,   True,   True,     True ],  # 3
-    ['shpe', 'Shaped Radial' , 2,   False,  True,     True ],  # 4
+    #type 0  /Desc 1     /colors 2/Angle 3 /Mid1 4   /Mid2 5'○''×'
+    ['flat', 'Flat plain'    , 1,   False, '－',         '－'     ],  # 0
+    ['2gra', '2colors Linear', 2,   True,  'MidPos(%)',  '－'     ],  # 1
+    ['3gra', '3colors Linear', 3,   True,  'MidPos(%)',  '－'     ],  # 2
+    ['2rad', '2colors Radial', 2,   True,  'Hpos(%)',    'Vpos(%)'],  # 3
+    ['shpe', 'Shaped Radial' , 2,   False, 'Hpos(%)',    'Vpos(%)'],  # 4
+    ['2glt', '2colors+Lattice',3,   True,  'MidPos(%)',  'Slit W' ],  # 5
     ]
 
 Palette_set = {'Asayake': ['#183068', '#1f6000', '#e07836'],
@@ -146,8 +150,8 @@ def desc(p):
                    sg.Text('Midpoint', width=10),
                    sg.Text('End', width=10),
                    sg.Text('Angle', width=4),
-                   sg.Text('Mid1', width=4),
-                   sg.Text('Mid2', width=4),
+                   sg.Text('Param1', width=10),
+                   sg.Text('Param2', width=10),
                    ]
 
     top_sect = [sg.Text(width=2),
@@ -157,8 +161,8 @@ def desc(p):
                 cbutton(2),
                 cbutton(1),
                 sg.Input(f'{angle}', key='-angl-', width=4),
-                sg.Input(f'{mid1}', key='-mid1-', width=4),
-                sg.Input(f'{mid2}', key='-mid2-', width=4),
+                sg.Input(f'{mid1}', key='-mid1-', width=10),
+                sg.Input(f'{mid2}', key='-mid2-', width=10),
                 ]
 
     func_sect = [[sg.Text('')],
@@ -335,8 +339,8 @@ def scheme_selector(sno, cols, default):
             sg.Button('', key=f'-c2_s{sno}-', width=10,
                       background_color=cpat[1], disabled=True),
             sg.Text('○' if sc[3] else '×', key=f'-angl_s{sno}-', width=4),
-            sg.Text('○' if sc[4] else '×', key=f'-midl_s{sno}-', width=4),
-            sg.Text('○' if sc[5] else '×', key=f'-mid2_s{sno}-', width=4),
+            sg.Text(sc[4], key=f'-midl_s{sno}-', width=10),
+            sg.Text(sc[5], key=f'-mid2_s{sno}-', width=10),
             ]
     return line
 
@@ -488,6 +492,30 @@ def shaped(W, H, color1, color2, mid1=None, mid2=None):
     return Image.fromarray(np.round(result).astype(np.uint8), 'RGB')
 
 
+# 形状5 グラデーションに幅d・間隔dの格子状スリットを入れる
+def slit(image, d=1, angle=0.0):
+    arr = np.array(image.convert("RGBA"))
+    h, w = arr.shape[:2]
+    ys, xs = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
+
+    # (x, y) → (u, v) に逆回転
+    a = np.deg2rad(angle)
+    ca, sa = np.cos(a), np.sin(a)
+
+    cx, cy = w / 2, h / 2
+    x = xs - cx
+    y = ys - cy
+
+    u =  ca * x + sa * y
+    v = -sa * x + ca * y
+
+    # 格子判定（周期 2d）した位置のalphaを0に
+    mask = ((u % (2*d)) < d) | ((v % (2*d)) < d)
+    arr[mask, 3] = 0
+
+    return Image.fromarray(arr, mode="RGBA")
+
+
 # wallpaper 共通エントリ
 def generate(p: Param):
     """指定した角度で2～3色のグラデーション画像を生成する。"""
@@ -514,6 +542,22 @@ def generate(p: Param):
         return radial(width, height, color1, color2, mid1, mid2,  angle)
     elif scheme == 4:
         return shaped(width, height, color1, color2, mid1, mid2)
+    elif scheme == 5:
+        c3 = list(clip8((color1[i]+color2[i])/2) for i in range(3))
+        im = tricolor(width, height, color1, color2, c3, mid1, angle)
+        if mid2 < 1:  # 間隔1以下の場合はNG
+            return im
+
+        # 2色グラデに格子状にalpha=0で線を引く
+        im = slit(im, mid2, angle)
+        
+        # 隙間が出来たimageをcolor3/BGに合成
+        base = p.bg()
+        if base is None:
+            base = Image.new('RGBA', (width, height), color3)
+        base.paste(im, (0,0), im)
+        
+        return base
     else:
         return Image.new('RGB', (width, height), color1)
 
