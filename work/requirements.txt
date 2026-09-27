@@ -1,0 +1,6 @@
+fonttools==4.65.0
+numpy==2.2.6
+pillow==12.3.0
+pyinstaller==6.22.3
+pywin32-ctypes==0.2.3
+TkEasyGUI==1.0.45

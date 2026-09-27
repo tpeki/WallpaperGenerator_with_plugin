@@ -2,11 +2,17 @@
 
 - 不要なモジュールまで組み込むと手間なので、venvを設定する
 
+  - requirements.txtを利用すると簡単だが、8行目のようにパッケージ名を指定した方が安心な人は列挙してもOK
+
   - ```
     % py -m venv .venv
     % .venv\Scripts\activate
+    
     % python -m pip install --upgrade pip
-    % pip install pillow numpy fonttools TkEasyGUI pyinstaller
+    
+    % pip install -r requirments.txt 
+    もしくは
+    % pip install pillow numpy fonttools TkEasyGUI pywin32-ctypes pyinstaller
     ```
 
 - このディレクトリから build.bat と WallpaperGenerator.spec を wallpaper.pyw と同じディレクトリに配置
