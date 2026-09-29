@@ -108,6 +108,8 @@ class SpriteSet:
         self.name = INT_LABEL
         self.desc = 'Internal Set'
         self.enabled = list(INTERNAL_SET.keys())
+        
+        return self
 
     def set_pattern(self, name, patterndic, desc=''):
         self.sprites = patterndic
