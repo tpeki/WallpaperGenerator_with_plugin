@@ -105,7 +105,7 @@ tyrolean_preserv = {'tape_pattern': 'simple',
                     }
 
 
-class Tape:
+class Tapes:
     def __init__(self):
         self.patterns = {}
         self.set_name = ''
@@ -125,7 +125,7 @@ class Tape:
 
     def load_internal(self):
         self.patterns = self.internal_set.copy()
-        self.name = self.internal_name
+        self.set_name = self.internal_name
 
 
     def list(self):
@@ -169,6 +169,86 @@ class Tape:
         self.patterns[label] = copy.deepcopy(pattern)
         return self.patterns[label]
 
+    def pat_to_text(self, label):
+        """1パターン分のテキスト
+        返り値： 以下のフォーマットで返却。ラベルが存在しなければNone
+        [label]
+        カラム数
+        パレット、ドット数,パレット、ドf'ット数,...  (1カラム分)
+        パレット、ドット数,...
+        """
+        if not label in self.patterns:
+            return None
+        
+        pattern = self.patterns[label]
+        lines = [f'[{label}]',f'{len(pattern)}']
+        for column in pattern:
+            buf = []
+            for pix in column:
+                if isinstance(pix, tuple|list):
+                    buf.append(f'{int(pix[0])},{int(pix[1])}')
+            lines.append(','.join(buf))
+
+        return lines
+
+    def patterns_to_text(self):
+        buf = [f'#TapeSet:{self.set_name}',]
+        for pat in self.patterns:
+            ptxt = self.pat_to_text(pat)
+            if ptxt is not None:
+                buf.extend(ptxt)
+        return buf
+
+    def text_to_pat(self, buf):
+        ptr = 0
+        if buf[ptr][0] != '[':
+            return None, 0
+        label = buf[ptr][1:].split(']')[0]
+        ptr += 1
+        length = int(buf[ptr])
+        ptr += 1
+        pat_data = []
+        for line in range(length):
+            array = buf[ptr+line].splt(',')
+            lbuf = []
+            for n in range(len(array)//2):
+                p = safe_int(array[n*2])
+                l = safe_int(array[n*2+1])
+                if l > 0:
+                    lbuf.append((p,l))
+            pat_data.append(lbuf)
+        return {label: pat_data}, ptr+length
+ 
+
+    def text_to_patterns(self, buf):
+        ptr = 0
+        while buf[ptr][0] != '[':  # パターン名行までスキップ
+            if buf[ptr].startswith('#TapeSet:'):
+                set_name = buf[ptr][9:].split(' ')[0]
+            ptr += 1
+            if ptr > len(buf):
+                return None
+        pattern_set = {}
+        while True:
+            pat, nxptr = self.text_to_pat(self, buf[ptr:])
+            if ptr+nxptr > len(buf):
+                break
+            if isinstance(pat, dict):
+                pattern_set.update(pat)
+            ptr += nxptr
+            while  buf[ptr][0] != '[':
+                ptr += 1
+                if ptr > len(buf):
+                    break
+
+        return set_name, pattern_set
+
+def safe_int(s):
+    try:
+        r = int(s)
+    except ValueError:
+        r = 0
+    return r
 
 tape_pattern = copy.deepcopy(INT_PATTERNS)
 # <pattern_dict> ::= {<patname>: [list([list((int, int),...)],...)], ... }
@@ -901,7 +981,7 @@ def chk(tape_name=None, fringe=3, gap=3, sprname=None):
     """method=0 PIL, 1 Numpy"""
     border = '#440000'
 
-    tapes = Tape()
+    tapes = Tapes()
     tapes.load_internal()
     
     if tape_name is None:
