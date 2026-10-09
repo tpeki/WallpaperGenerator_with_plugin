@@ -1,3 +1,6 @@
+if __name__ == '__main__':
+    import _4debug
+    
 from wall_common import *
 import re
 import copy
@@ -7,7 +10,7 @@ import os.path as pa
 import TkEasyGUI as sg
 import filedialog as fdi
 import numpy as np
-from PIL import Image, ImageDraw, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFilter, UnidentifiedImageError
 
 #スプライトデータ形式(SJIS)：
 #ファイルのベース名をセット名として扱う
@@ -34,8 +37,8 @@ from PIL import Image, ImageDraw, UnidentifiedImageError
 
 MAX_SIZE = (128,128)
 
-INT_LABEL = '--internal--'
-INTERNAL_SET = {
+INT_SETNAME = '--internal--'
+INT_SPRITES = {
     'rhkd':[
         (16,16),
         [0x18,'#A9792C'], [0xfcb,'#A9792C'],
@@ -102,35 +105,149 @@ class SpriteSet:
         self.sprites = {}
         self.enabled = []
         self.anglefix = None
+
+        self.internal_set = copy.deepcopy(INT_SPRITES)
+        self.internal_name = INT_SETNAME
+
+    def set_internal(self, name=None, sprite_set=None):
+        """set internal sprite-set"""
+        if sprite_set is None:
+            sprite_set = INT_SPRITES
+        self.internal_set = copy.deepcopy(sprite_set)
+
+        if name is None:
+            name = INT_SETNAME
+        self.internal_name = name
+
+        return len(self.internal_set)
        
     def load_internal(self):
-        self.sprites = copy.deepcopy(INTERNAL_SET)
-        self.name = INT_LABEL
+        """load internal patterns (set by set_internal() or sps.INTERNAL_*)"""
+        self.sprites = copy.deepcopy(self.internal_set)
+        self.name = self.internal_name
         self.desc = 'Internal Set'
-        self.enabled = list(INTERNAL_SET.keys())
+        self.enabled = list(self.sprites.keys())
         
         return self
 
-    def set_pattern(self, name, patterndic, desc=''):
-        self.sprites = patterndic
-        self.name = name
+    def set_patterns(self, set_name, patterndic, desc=''):
+        """set external sprite-set
+            patterndic: {spr1: [lines], spr2: [lines], ...}
+        """
+        self.sprites =  copy.deepcopy(patterndic)
+        self.name = set_name
         self.desc = desc if desc is not None else ''
         self.enabled = list(patterndic.keys())
 
     def list(self):
+        """get sprite label list in spriteset"""
         return list(self.sprites.keys())
    
     def get(self, label):
+        """get list of sprite_strings of label"""
         if label in self.list():
             return self.sprites[label]
         else:
             return None
 
     def size(self, label):
+        """get pixel size (w,h) of label"""
         if label in self.list():
             return self.sprites[label][0]
         else:
             return (0,0)
+
+    def trim(self, label, size):
+        if isinstance(size, tuple):
+            w, h = size
+        else:
+            w = int(size)
+            h = w
+        ow, oh = self.size(label)
+        if ow*oh*w*h ==0:
+            return None
+        
+        pat = sprite_pattern(label, self)
+        if h > oh:
+            dummy = '0'*ow
+            for _ in range(h-oh):
+                pat.append((dummy,['#000000',]))
+        else:
+            pat = pat[:h]
+
+        out = []
+        if w > ow:
+            for rec in pat:
+                string, pal = rec
+                string = string + '0'*(w-ow)
+                out.append((string, pal))
+        else:
+            for rec in pat:
+                string, pal = rec
+                string = string[:w]
+                out.append((string, pal))
+        
+        print(out)
+        sprdat = pattern_to_spr(out)
+        self.sprites[label] = sprdat
+        
+
+    def image(self, label):
+        """get Image of label"""
+        if label in self.sprites:
+            spr = sprite_pattern(label, self)
+            image = sprite_image(spr)
+
+            return image
+        else:
+            return None
+
+
+    def merge_pdic(self, appendic):
+        """スプライトセット(辞書)をマージ(既存置き換えない)
+        return: マージ後のスプライトセット"""
+        for k, v in appendic.items():
+            if k not in self.sprites:
+                self.sprites[k] = copy.deepcopy(v)
+        en = list(appendic.keys())
+        self.enabled = list(set(self.enabled) | set(en))
+        return self.sprites
+
+
+    def update_sprite(self, label, sprdat, add_only=False):
+        """スプライトセットにスプライトデータ(list(list(tuple|int)))を登録
+          add_only=Trueにすると上書き禁止"""
+        if add_only and label in self.sprites:
+            return None
+        try:
+            self.sprites[label] = copy.deepcopy(sprdat)
+            return self.image(label)
+        except Exception:
+            if label in self.sprites:
+                self.sprites.pop(label)
+        return None
+
+    def add_bytext(self, label, pattext):
+        """add by list of text"""
+        lst = []
+        for line in pattext:
+            d = str_to_tuple(line)
+            lst.append(d)
+        return self.add_bylist(label, lst)
+
+    def add_byimage(self, label, image, transparent=None):
+        """"""
+        if transparent == None:
+            transparent = (0,0,0)
+        stext = conv_spr(image, transparent)
+        return self.add_bytext(label, stext)
+
+    def image_with_border(self, label, border_color='#000000', put_orig=True):
+        """指定ラベルのスプライトに縁取りを付けた画像を取得"""
+        img = self.image(label)
+        if img is None:
+            return None
+        return draw_sprite_with_border(img, border_color, put_orig)
 
 
 # -----
@@ -146,7 +263,7 @@ def sprfile_list(directory, zfile):
     patn = directory+pa.sep+'*.spr'
     files = [fn.replace('.spr','') \
              for fn in fdi.glob_filelistz(patn, add_zip=zfile)]
-    files.append(INT_LABEL)
+    # files.append(INT_SETNAME)  # internalは呼び出し元で追加する
     return files
 
 
@@ -430,7 +547,8 @@ def reduce_cpr(img, colors_per_row):
 def conv_spr(img, transparent_color):
     """ビットマップをスプライト文字列に変換
         透過色は #rrggbb形式で指定"""
-    transparent_color = transparent_color.upper()
+    tc = rgb_string(transparent_color)
+    transparent_color = tc.upper()
 
     w, h = img.size
     text = [f'{w},{h}']
@@ -523,6 +641,10 @@ def and_pat(orig, pat, n):
 
 
 def sprite_pattern(name: str, sprites: SpriteSet):
+    """spriteをピクセル毎の色番号文字列に変換
+      [(pat_str, [colors,]), ...]
+       （pat_strは各位置の数字で行内各ピクセルがcolorsの何番目の色かを示す）
+    """
     if name not in sprites.sprites:
         return []
     
@@ -590,11 +712,103 @@ def sprite_pattern(name: str, sprites: SpriteSet):
     return spr[:h]
 
 
+def format_line_for_dtos(line):
+    """raw_lines の 1行 [patterns, colors] を正しい SPR 形式文字列に変換"""
+    patterns, colors = line[0], line[1]
+
+    # パターン部分の文字列化
+    if isinstance(patterns, list):
+        pat_str = '[' + ','.join(f'0x{p:x}' if p >= 10 else f'{p}' for p in patterns) + ']'
+    else:
+        pat_str = f'0x{patterns:x}' if patterns >= 10 else f'{patterns}'
+
+    # カラー部分の文字列化
+    if isinstance(colors, list):
+        col_str = '[' + ','.join(f"'{c}'" for c in colors) + ']'
+    else:
+        col_str = f"'{colors}'" if colors.startswith('#') else colors
+
+    return f"{pat_str},{col_str}"
+
+
+def pattern_to_spr(pat_list, do_compress=True):
+    """
+    sprite_pattern() の出力 [(pat_str, colors), ...] を
+    SpriteSet が扱う格納形式 [(w, h), (patterns, colors), ...] に復元する
+    """
+    if not pat_list:
+        return [(0, 0)]
+
+    height = len(pat_list)
+    width = len(pat_list[0][0])
+    
+    raw_lines = []
+
+    for pat_str, colors in pat_list:
+        # パターン文字列がすべて '0' (透明) の場合
+        if set(pat_str) == {'0'} or not pat_str:
+            bg_col = colors[0] if isinstance(colors, list) and colors else (colors if isinstance(colors, str) else '#000000')
+            raw_lines.append([0, bg_col])
+            continue
+
+        # 使用されている色インデックス (1-indexed) を取得
+        used_indices = sorted(list(set(int(c, 16) for c in pat_str if c != '0')))
+
+        bit_patterns = []
+        actual_colors = []
+
+        for idx in used_indices:
+            mask = 0
+            for char in pat_str:
+                mask = (mask << 1) | (1 if int(char, 16) == idx else 0)
+            
+            bit_patterns.append(mask)
+            
+            if isinstance(colors, list) and (idx - 1) < len(colors):
+                actual_colors.append(colors[idx - 1])
+            elif isinstance(colors, str):
+                actual_colors.append(colors)
+            else:
+                actual_colors.append('#000000')
+
+        if len(bit_patterns) == 1:
+            raw_lines.append([bit_patterns[0], actual_colors[0]])
+        else:
+            raw_lines.append([bit_patterns, actual_colors])
+
+    # --------------------------------------------------
+    # 圧縮機能 (compress) の適用
+    # --------------------------------------------------
+    if do_compress and len(raw_lines) > 0:
+        # 1. 正しい括弧付き文字列に変換
+        str_buf = [format_line_for_dtos(line) for line in raw_lines]
+        
+        # 2. compress に通す
+        compressed_buf = compress(str_buf)
+        
+        # 3. str_to_tuple で内部タプル形式に戻す
+        body = []
+        for line in compressed_buf:
+            if line.startswith(','):
+                # ,rep や ,turnover などのコマンド行
+                cmd = line.lstrip(',').strip()
+                body.append((None, cmd))
+            else:
+                dat = str_to_tuple(line)
+                if dat is not None:
+                    body.append(dat)
+    else:
+        body = raw_lines
+
+    return [(width, height)] + body
+
+
 def get_sprite_by_name(name: str, sprites: SpriteSet):
     if name not in sprites.list():
         return Image.new('RGB',(8,8),0)
     pat = sprite_pattern(name, sprites)
     return sprite_image(pat)
+
 
 # -----
 # スプライトビットマップ生成
@@ -621,6 +835,44 @@ def sprite_image(pat: list):
         draw_oneline(dr, pat, colors, y)
         y += 1
     return img
+
+
+def draw_sprite_with_border(sprite_img, border_color='#000000', put_orig=True):
+    """スプライト画像の縁取りを生成
+    sprite_img : PIL.Image.Image, border_color : str or tuple,
+    put_orig: 元スプライトを配置(default=True)
+     -> PIL.Image.Image
+        (w+2, h+2) サイズの縁取り付き RGBA 画像
+    """
+    if sprite_img is None:
+        return None
+
+    if sprite_img.mode != 'RGBA':
+        sprite_img = sprite_img.convert('RGBA')
+
+    w, h = sprite_img.size
+    
+    # 1. (w+2, h+2) の新しいキャンバス（元画像は (1,1) に配置）
+    padded_img = Image.new('RGBA', (w + 2, h + 2), (0, 0, 0, 0))
+    padded_img.paste(sprite_img, (1, 1))
+
+    # 2. ONになっているピクセル（Alpha > 0）から Lモードのマスクを取得,0 or 255に
+    alpha = padded_img.split()[3]
+    mask = alpha.point(lambda p: 255 if p > 0 else 0)
+
+    # 3. 3x3 の MaxFilter を適用して周囲 1 ピクセル分膨張 (3x3 領域の最大値をとる)
+    expanded_mask = mask.filter(ImageFilter.MaxFilter(size=3))
+
+    border_color = to_rgb(border_color)
+    border_base = Image.new('RGBA', (w + 2, h + 2), border_color)
+    result = Image.new('RGBA', (w + 2, h + 2), (0, 0, 0, 0))
+    result.paste(border_base, (0, 0), mask=expanded_mask)
+
+    if put_orig:
+        result.paste(padded_img, (0, 0), mask=padded_img)
+
+    return result
+
 
 # 追加画面パレット
 def palette_extract(img, max_colors=16):
@@ -766,7 +1018,7 @@ def create_spr(spriteset, directory):
             wn.un_hide()
             if result:
                 pdic, setname, foldername = result
-                spriteset.set_pattern(setname, pdic, desc=foldername)
+                spriteset.set_patterns(setname, pdic, desc=foldername)
                 break
         elif ev == '-import-':
             ftypes = '*.png;*.jpg;*.gif;*.ico'

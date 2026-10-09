@@ -1,6 +1,9 @@
-import _4debug
+if __name__ == '__main__':
+    import _4debug
+
 from wall_common import *
 import os.path as pa
+import copy
 import TkEasyGUI as sg
 import filedialog as fdi
 import numpy as np
@@ -11,8 +14,8 @@ from plugins import sub_sprites as sps
 WIDTH = 1920
 HEIGHT = 1080
 FGCOLOR1 = (0x99, 0xdd, 0xdd)  # テープ基本色1
-FGCOLOR2 = (0xcc, 0xcc, 0xcc)  # テープ基本色2
-BGCOLOR =  (0x66, 0x66, 0x66) # 背景基本色
+FGCOLOR2 = (0xec, 0xec, 0xec)  # テープ基本色2
+BGCOLOR =  (0xc6, 0xc6, 0xc6) # 背景基本色
 FGJITTER = 30  # テープ色ゆらぎ FGC1 +/- FGJitter, FGC2 +/- FGJitter, 
 BGJITTER = 50  # 背景色ゆらぎ  Gradation(BG +/- BGJitter,BG +/- BGJitter)
 BRIGHT = 100  # 前景明度
@@ -29,19 +32,65 @@ ZIPFILE = 'sprites.zip'
 PALETTE_SIZE = 10
 
 Palette = [FGCOLOR1, FGCOLOR2,  (0xdd, 0x99, 0xdd),  (0x99, 0xdd, 0x99),
-           (0xdd, 0xdd, 0x99), (0xdd, 0x99, 0x99), (0x99, 0x99, 0xdd),
-           (0xdd, 0xbb, 0x99), (0xbb, 0x99, 0xbb), (0x44, 0x44, 0x44)  
+           (0xee, 0xee, 0x99), (0xdd, 0x99, 0x99), (0x99, 0x99, 0xdd),
+           (0xee, 0xbb, 0x99), (0xbb, 0x99, 0xee), (0x44, 0x44, 0x44)  
            ]
 
-Pattern = {'simple': [[(0,3),(1,1),(0,8),(1,1),(0,3)]],
-           'cross': [[(0,1),(1,1),(0,1),(1,1),(0,1),(1,1),(0,2),
-                      (1,1),(0,1),(1,1),(0,1),(1,1),(0,1)],
-                     [(1,1),(0,1),(1,1),(0,1),(1,1),(0,1),(1,2),
-                      (0,1),(1,1),(0,1),(1,1),(0,1),(1,1)]],
-           'zigzag': [[(1,2),(0,4),(1,2),(0,4),(1,2),(0,4),(1,2)],
-                      [(0,2),(1,2),(0,4),(1,2),(0,4),(1,2),(0,4)],
-                      [(0,4),(1,2),(0,4),(1,2),(0,4),(1,2),(0,2)]],
-           }
+INT_PATTERNS = {
+    'flat': [[(0,18)]
+             ],  # 18px
+    'simple': [[(0,3), (1,2), (0,10), (1,2), (0,3)]
+               ],  # 20px
+    'cross': [[(0,2), (1,2), (0,1), (1,2), (2,1), (1,1), (2,1), (1,2),
+               (0,1), (1,2), (0,2)],
+              [(0,2), (1,3), (0,1), (1,2), (2,1), (1,2), (0,1), (1,3), (0,2)],
+              [(0,2), (1,1), (2,1), (1,2), (0,1), (1,3), (0,1), (1,2),
+               (2,1), (1,1), (0,2)],
+              [(0,2), (2,1), (1,1), (2,1), (1,2), (0,1), (1,1), (0,1),
+               (1,2), (2,1), (1,1), (2,1), (0,2)],
+              [(0,1), (2,1), (1,3), (2,1), (1,2), (0,1), (1,2), (2,1),
+               (1,3), (2,1), (0,1)],
+              [(0,2), (2,1), (1,1), (2,1), (1,2), (0,1), (1,1), (0,1),
+               (1,2), (2,1), (1,1), (2,1), (0,2)],
+              [(0,2), (1,1), (2,1), (1,2), (0,1), (1,3), (0,1), (1,2),
+               (2,1), (1,1), (0,2)],
+              [(0,2), (1,3), (0,1), (1,2), (2,1), (1,2), (0,1), (1,3), (0,2)],
+              [(0,2), (1,2), (0,1), (1,2), (2,1), (1,1), (2,1), (1,2),
+               (0,1), (1,2), (0,2)],
+              [(0,2), (1,1), (0,1), (1,2), (2,1), (1,3), (2,1), (1,2),
+               (0,1), (1,1), (0,2)],
+              ],  # 17px
+    'zigzag': [[(0,3), (1,2), (5,3), (1,2), (0,3), (1,2)],
+               [(1,1), (0,3), (1,2), (5,3), (1,2), (0,3), (1,1)],
+               [(1,2), (0,3), (1,2), (5,3), (1,2), (0,3)],
+               [(1,1), (0,3), (1,2), (5,3), (1,2), (0,3), (1,1)],
+               ],  # 15px
+    'bubble': [[(0,2),(9,1),(5,5),(9,3),(4,4),(9,1),(0,2)],
+               [(0,2),(9,2),(5,3),(9,3),(4,6),(0,2)],
+               [(0,2),(9,7),(4,8),(0,1)],
+               [(0,2),(9,7),(4,8),(0,1)],
+               [(0,2),(9,6),(6,3),(4,6),(0,1)],
+               [(0,2),(9,4),(6,7),(4,4),(0,1)],
+               [(0,2),(9,3),(6,9),(4,2),(0,2)],
+               [(0,2),(9,2),(6,11),(9,1),(0,2)],
+               [(0,2),(9,2),(6,11),(9,1),(0,2)],
+               [(0,2),(9,1),(6,13),(0,2)],
+               [(0,2),(9,1),(6,13),(0,2)],
+               [(0,2),(9,1),(6,13),(0,2)],
+               [(0,2),(9,2),(6,11),(9,1),(0,2)],
+               [(0,2),(9,2),(6,11),(9,1),(0,2)],
+               [(0,2),(9,2),(5,3),(6,6),(3,2),(9,1),(0,2)],
+               [(0,2),(9,1),(5,5),(6,4),(3,4),(0,2)],
+               [(0,2),(5,7),(6,2),(9,1),(3,4),(0,2)],
+               [(0,1),(5,9),(9,3),(3,2),(9,1),(0,2)],
+               [(0,1),(5,9),(9,6),(0,2)],
+               [(0,1),(5,9),(9,6),(0,2)],
+               [(0,2),(5,7),(9,7),(0,2)],
+               ],  # 18px
+    'rainbow': [[(9,2), (5,2), (9,1), (7,2), (9,1), (4,2), (9,1),(3,2),
+                 (9,1), (6,2), (9,2)]
+                ],  # 18px
+    }
 
 tyrolean_preserv = {'tape_pattern': 'simple',
                     'palette': Palette.copy(),
@@ -55,8 +104,109 @@ tyrolean_preserv = {'tape_pattern': 'simple',
                     'sps': None
                     }
 
-tape_pattern = Pattern.copy()  # {<patname>: list(line=list((int, int)))
 
+class Tape:
+    def __init__(self):
+        self.patterns = {}
+        self.set_name = ''
+        self.internal_set = copy.deepcopy(INT_PATTERNS)
+        self.internal_name = '--Internal--'
+
+    def set_internal(self, name=None, pattern_dic=None):
+        if pattern_dic is None:
+            pattern_dic = INT_PATTERNS
+        self.internal_set = copy.deepcopy(pattern_dic)
+
+        if name is None:
+            name = '--Internal--'
+        self.internal_name = name
+
+        return len(self.internal_set)
+
+    def load_internal(self):
+        self.patterns = self.internal_set.copy()
+        self.name = self.internal_name
+
+
+    def list(self):
+        return list(self.patterns.keys())
+
+    def get(self, label):
+        if label in self.list():
+            return self.patterns[label]
+        else:
+            return None
+
+    def size(self, label):
+        return check_pat_size(self.patterns[label])
+
+    def image(self, label, length=None):
+        if length is None:
+            length,h = self.size(label)
+
+        return tape_numpy(label, int(length), self.patterns)
+
+    def set_patterns(self, set_name, pattern_dic):
+        if pattern_dic is None:
+            return None
+        self.patterns = copy.deepcopy(pattern_dic)
+
+        if name is None:
+            name = next(iter(self.patterns.key()))
+        self.internal_name = name
+        return self.patterns
+
+
+    def merge_patterns(self, appendic):
+        """パターンセット(辞書)をマージ(既存は書き換えない)
+        return: マージ後のパターンセット"""
+        for k, v in appendic.items():
+            if k not in self.patterns:
+                self.patterns[k] = copy.deepcopy(v)
+        return self.patterns
+
+    def add_pattern(self, label, pattern):
+        self.patterns[label] = copy.deepcopy(pattern)
+        return self.patterns[label]
+
+
+tape_pattern = copy.deepcopy(INT_PATTERNS)
+# <pattern_dict> ::= {<patname>: [list([list((int, int),...)],...)], ... }
+
+INT_SETNAME = '*Sunflower*'
+INT_SPRITES = {
+    'pat1': [
+        [0x10, 0x10],
+        [0x180, '#FF0808'],
+        [0x6186, '#FF0808'],
+        [0x6006, '#FF0808'],
+        [0x1188, '#FF0808'],
+        [0xff0, '#FF0808'],
+        [0xc30, '#FF0808'],
+        [0x990, '#FF0808'],
+        [0xdbdb, '#FF0808'],
+        [None, 'turnover'],
+        ],
+    'pat2': [
+        [0x10, 0x10],
+        [0, '#000000'],
+        [0x80, '#FFF208'],
+        [0x258c, '#FFF208'],
+        [0x3598, '#FFF208'],
+        [0x1bd0, '#FFF208'],
+        [[0x42c, 0x180], ['#FFF208', '#A40C00']],
+        [[0x810, 0x3c0], ['#FFF208', '#A40C00']],
+        [[0x781c, 0x7e0], ['#FFF208', '#A40C00']],
+        [[0x381e, 0x7e0], ['#FFF208', '#A40C00']],
+        [[0x810, 0x3c0], ['#FFF208', '#A40C00']],
+        [[0x3420, 0x180], ['#FFF208', '#A40C00']],
+        [0xbd8, '#FFF208'],
+        [0x19ac, '#FFF208'],
+        [0x31a4, '#FFF208'],
+        [0x100, '#FFF208'],
+        [0, '#000000'],
+        ],
+    }
 
 # module基本情報
 def intro(modlist: Modules, module_name):
@@ -82,6 +232,129 @@ def default_param(p: Param):
     p.pheight = BODER
     p.pdepth = SPACING
     return p
+
+
+# 基本スプライトの設定
+def set_intspr(): # -> sps.SpriteSet
+    s = sps.SpriteSet()
+    # s.set_internal()  # defaultset in sps
+    s.set_internal(INT_SETNAME, INT_SPRITES)  # 先頭の定義を内部定義に設定
+    s.load_internal()  # 以降、内部loadは先頭の定義に
+
+    return s
+
+
+# テープパターンの基本サイズを取得
+def check_pat_size(pattern):
+    """patternの周期長、テープ幅を取得 -> (W, H)"""
+    w = []
+    #try:
+    for x in pattern:
+        linemax = sum([j for i,j in x])
+        w.append(linemax)
+        #print(linemax, x)
+        
+    return len(pattern), max(w)
+    #except ValueError:
+     #   return None
+
+
+def tape_pil(pat_name: str, length: int,
+             pattern_dict: dict = None) -> Image.Image:
+    """
+    指定されたパターン名と長さ(幅)に基づいてテープ画像を生成する
+    
+    :param pat_name: パターン名 ('simple', 'cross' など)
+    :param length: 描画するテープの長さ（画像の横幅 px）
+    :param pattern_dict: パターン辞書
+    :return: PIL.Image オブジェクト (RGBモード)
+    """
+    if pattern_dict is None:
+        pattern_dict = tape_pattern
+    if pat_name not in pattern_dict:
+        print(f"パターン '{pat_name}' が存在しないので暫定パターンを利用します")
+        pat_name = next(iter(pattern_dict.keys()))
+    
+    cols_data = pattern_dict[pat_name]
+    num_cols, tape_height = check_pat_size(cols_data)
+    
+    # 1. 1列ごとのピクセル列を作成
+    pattern_columns = []
+    for col in cols_data:
+        pixels = []
+        for palette_idx, count in col:
+            pixels.extend([palette_idx] * count)
+        pattern_columns.append(pixels)
+    
+    # 2. パターンユニット（基本周期）の画像を作成
+    unit_img = Image.new('P', (num_cols, tape_height))
+    
+    # パレット情報を登録 (PILの'P'モード用)
+    flat_palette = [c for color in Palette for c in color]
+    #print(flat_palette)
+    # 256色分までフラットなリストを補完
+    flat_palette += [0] * (768 - len(flat_palette))
+    unit_img.putpalette(flat_palette)
+    
+    # ピクセルデータを敷き詰める
+    unit_pixels = []
+    for y in range(tape_height):
+        for x in range(num_cols):
+            if len(pattern_columns[x])>y:
+                unit_pixels.append(pattern_columns[x][y])
+            
+    unit_img.putdata(unit_pixels)
+    
+    # 3. 指定した length (横幅) までタイル状に敷き詰めて切り出す
+    repeats = (length // num_cols) + 1
+    tiled_img = Image.new('P', (num_cols * repeats, tape_height))
+    tiled_img.putpalette(flat_palette)
+    
+    for i in range(repeats):
+        tiled_img.paste(unit_img, (i * num_cols, 0))
+        
+    # 指定サイズにクロップしてRGB変換して返す
+    final_img = tiled_img.crop((0, 0, length, tape_height)).convert('RGB')
+    return final_img
+
+
+def tape_numpy(pat_name: str, length: int,
+               pattern_dict: dict = None) -> Image.Image:
+    """
+    指定されたパターン名と長さ(幅)に基づいてテープ画像を生成する
+    
+    :param pat_name: パターン名 ('simple', 'cross' など)
+    :param length: 描画するテープの長さ（画像の横幅 px）
+    :param pattern_dict: パターン辞書
+    :return: PIL.Image オブジェクト (RGBモード)
+    """
+    if pattern_dict is None:
+        pattern_dict = tape_pattern
+    if pat_name not in pattern_dict:
+        print(f"パターン '{pat_name}' が存在しないので暫定パターンを利用します")
+        pat_name = next(iter(pattern_dict.keys()))
+        
+    cols_data = pattern_dict[pat_name]
+    num_cols, tape_height = check_pat_size(cols_data)
+    
+    # パターン1ユニット分(高さ × 列数)の配列を作成
+    unit_matrix = np.zeros((tape_height, num_cols, 3), dtype=np.uint8)
+    
+    for x, col in enumerate(cols_data):
+        y = 0
+        for pal_idx, count in col:
+            color = Palette[pal_idx]
+            unit_matrix[y:y+count, x] = color
+            y += count
+            
+    # 横方向にリピートして指定の length にスライス
+    repeats = (length // num_cols) + 1
+    full_matrix = np.tile(unit_matrix, (1, repeats, 1))[:, :length, :]
+
+    h,w,_ = full_matrix.shape
+    rgba = np.dstack([full_matrix, np.full((h, w), 255, np.uint8)])
+    
+    return Image.fromarray(rgba,'RGBA')
 
 
 # -----
@@ -622,10 +895,59 @@ def generate(p: Param):
 
     return img
 
+# ------------------------------------------------------------------------
+import time
+def chk(tape_name=None, fringe=3, gap=3, sprname=None):
+    """method=0 PIL, 1 Numpy"""
+    border = '#440000'
+
+    tapes = Tape()
+    tapes.load_internal()
+    
+    if tape_name is None:
+        tape_name = 'simple'
+    if tape_name not in tapes.list():
+        tape_name = next(iter(tapes.list()))
+
+    s = set_intspr()
+    if sprname is None:
+        sprname = next(iter(s.list()))
+
+    spr = s.image_with_border(sprname, border_color=border)
+    sprw, sprh = spr.size
+    tapew, tapeh = tapes.size(tape_name)
+
+    sr = (sprh+fringe*2)/tapeh
+
+    print(f'SPR:{sprw},{sprh}->{sprw+fringe*2},{sprh+fringe*2} Tape: {tapew},{tapeh} Sr:{sr}')
+    if sr < 1:
+        spr = spr.resize((int(sprw/sr), int(sprh/sr)),
+                         resample=Image.NEAREST)
+        sprw, sprh = spr.size
+        sr = 1.0
+
+    print(f'SPR:{sprw},{sprh}->{sprw+fringe*2},{sprh+fringe*2} Tape: {tapew},{tapeh} Sr:{sr}')
+
+    length = 1920/sr
+    twidth = int(tapeh*sr)
+    
+    im = tapes.image(tape_name, int(length))
+    im = im.resize((1920, twidth), resample=Image.BICUBIC) #NEAREST) #
+
+    yo = (twidth-sprh)//2
+    pos = 0
+    while pos < 1920:
+        im.paste(spr, (pos, yo), spr)
+        pos += sprw+gap
+
+    im.show()
+        
+
 if __name__ == '__main__':
     if tyrolean_preserv['sps'] is None:
-        s = sps.SpriteSet()
-        s.load_internal()
+        #s = sps.SpriteSet()
+        #s.load_internal()
+        s = set_intspr()
         tyrolean_preserv['sps'] = s
 
     p = Param()
@@ -637,3 +959,4 @@ if __name__ == '__main__':
     #img = generate(p)
     #img.show()
 
+    chk('zigzag', 2)

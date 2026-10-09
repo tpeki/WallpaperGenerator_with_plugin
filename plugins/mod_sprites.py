@@ -1,3 +1,7 @@
+if __name__ == '__main__':
+    import _4debug
+
+from wall_common import *
 import random
 import math
 import copy
@@ -6,7 +10,6 @@ import TkEasyGUI as sg
 import filedialog as fdi
 import numpy as np
 from PIL import Image, ImageFilter, ImageChops, ImageOps
-from wall_common import *
 from plugins import sub_sprites as sps
 
 # --- 定数設定 ---
@@ -188,6 +191,8 @@ def desc(p: Param):
     sprite_backup = copy.deepcopy(sprite_preserv['data'])
 
     files = sps.sprfile_list(DATA_DIR, ZIPFILE)
+    files.append(sprite_preserv['data'].internal_name)
+    
     preview_image, mag = sprite_preview()
     anglsw = sprite_preserv['anglefix'] is not None
     angle = sprite_preserv['anglefix'] if anglsw else 0
@@ -234,7 +239,7 @@ def desc(p: Param):
             fname = wn['-set-'].get()
             if fname == '':
                 continue
-            elif sps.INT_LABEL == fname:
+            elif sprite_preserv['data'].internal_name == fname:
                 sprite_preserv['data'].load_internal()
             else:
                 pdic, sdesc = sps.load_spr(fname, DATA_DIR, ZIPFILE)
@@ -244,6 +249,8 @@ def desc(p: Param):
                     sprite_preserv['data'].set_pattern(fname, pdic, desc=sdesc)
             wn['-sdesc-'].update(sprite_preserv['data'].desc)
             files = sps.sprfile_list(DATA_DIR, ZIPFILE)
+            files.append(sprite_preserv['data'].internal_name)
+
             wn['-set-'].update(values=files)
             wn.refresh()
         elif ev == '-ins-':
