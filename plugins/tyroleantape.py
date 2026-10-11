@@ -151,9 +151,9 @@ class Tapes:
             return None
         self.patterns = copy.deepcopy(pattern_dic)
 
-        if name is None:
-            name = next(iter(self.patterns.key()))
-        self.internal_name = name
+        if set_name is None:
+            set_name = next(iter(self.patterns.key()))
+        self.internal_name = set_name
         return self.patterns
 
 
@@ -172,10 +172,10 @@ class Tapes:
     def pat_to_text(self, label):
         """1パターン分のテキスト
         返り値： 以下のフォーマットで返却。ラベルが存在しなければNone
-        [label]
-        カラム数
-        パレット、ドット数,パレット、ドf'ット数,...  (1カラム分)
-        パレット、ドット数,...
+        
+        [label]<br>
+        カラム数<br>
+        パレット,ドット数,パレット,ドット数,...<br>  ×カラム数
         """
         if not label in self.patterns:
             return None
@@ -192,6 +192,7 @@ class Tapes:
         return lines
 
     def patterns_to_text(self):
+        """パターンセットを文字列にする"""
         buf = [f'#TapeSet:{self.set_name}',]
         for pat in self.patterns:
             ptxt = self.pat_to_text(pat)
@@ -200,6 +201,8 @@ class Tapes:
         return buf
 
     def text_to_pat(self, buf):
+        """[パターン名]行から続くパターンテキストを読み込んで辞書レコードに変換
+        戻り値は 変換結果辞書(1エントリ), 取り込んだ行数"""
         ptr = 0
         if buf[ptr][0] != '[':
             return None, 0
@@ -209,7 +212,7 @@ class Tapes:
         ptr += 1
         pat_data = []
         for line in range(length):
-            array = buf[ptr+line].splt(',')
+            array = buf[ptr+line].split(',')
             lbuf = []
             for n in range(len(array)//2):
                 p = safe_int(array[n*2])
@@ -221,27 +224,38 @@ class Tapes:
  
 
     def text_to_patterns(self, buf):
+        """テキストからパターンを読み込んでテープセットに登録。
+            戻り値はset名とパターンセット(辞書) エラー時は None,None"""
         ptr = 0
         while buf[ptr][0] != '[':  # パターン名行までスキップ
             if buf[ptr].startswith('#TapeSet:'):
                 set_name = buf[ptr][9:].split(' ')[0]
             ptr += 1
             if ptr > len(buf):
-                return None
+                return None, None
         pattern_set = {}
         while True:
-            pat, nxptr = self.text_to_pat(self, buf[ptr:])
+            if ptr >= len(buf):
+                break
+            #print(buf[ptr:])
+            pat, nxptr = self.text_to_pat(buf[ptr:])
             if ptr+nxptr > len(buf):
                 break
             if isinstance(pat, dict):
                 pattern_set.update(pat)
             ptr += nxptr
-            while  buf[ptr][0] != '[':
-                ptr += 1
-                if ptr > len(buf):
+            while  ptr < len(buf):
+                if buf[ptr][0] == '[':
                     break
+                ptr += 1
 
+        if len(pattern_set) == 0:
+            return None, None
+        self.set_name = setname
+        self.patterns = pattern_set
+        
         return set_name, pattern_set
+
 
 def safe_int(s):
     try:
@@ -286,6 +300,25 @@ INT_SPRITES = {
         [0x100, '#FFF208'],
         [0, '#000000'],
         ],
+    'flower': [
+        [0x10, 0x10],
+        [0xee0, '#FA3E4C'],
+        [0x1ff0, '#FA3E4C'],
+        [None, 'rep2'],
+        [0xffe, '#FA3E4C'],
+        [[0x7e7f,0x180], ['#FA3E4C','#FBF99A']],
+        [[0xf81f,0x7e0], ['#FA3E4C','#FBF99A']],
+        [None, 'rep1'],
+        [[0x7c7e,0x380], ['#FA3E4C','#FBF99A']],
+        [[0xf81c,0x7e0], ['#FA3E4C','#FBF99A']],
+        [[0x791e,0x6e0], ['#FA3E4C','#FBF99A']],
+        [0x1fff, '#FA3E4C'],
+        [0x3fff, '#FA3E4C'],
+        [0x3ffe, '#FA3E4C'],
+        [0x3e7c, '#FA3E4C'],
+        [0xc38, '#FA3E4C'],
+        ],
+
     }
 
 # module基本情報

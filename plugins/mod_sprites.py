@@ -246,7 +246,7 @@ def desc(p: Param):
                 if len(pdic) == 0:
                     sprite_preserv['data'].load_internal()
                 else:
-                    sprite_preserv['data'].set_pattern(fname, pdic, desc=sdesc)
+                    sprite_preserv['data'].set_patterns(fname, pdic, desc=sdesc)
             wn['-sdesc-'].update(sprite_preserv['data'].desc)
             files = sps.sprfile_list(DATA_DIR, ZIPFILE)
             files.append(sprite_preserv['data'].internal_name)
@@ -283,7 +283,7 @@ def desc(p: Param):
             if len(sprite_preserv['data'].sprites) == 0:
                 continue
             fname = sprite_preserv['data'].name
-            if fname == sps.INT_LABEL or fname == '':
+            if fname == sps.INT_SETNAME or fname == '':
                 fname = 'temp'
             file = fdi.get_savefile(fname+'.spr',
                                     [('Sprite', '.spr'),],

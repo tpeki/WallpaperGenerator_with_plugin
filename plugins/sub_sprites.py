@@ -130,6 +130,21 @@ class SpriteSet:
         
         return self
 
+    def load_file(self, file, directory=None, add_zip=None):
+        pdic, desc = load_spr(file, directory, add_zip)
+        if pdic is not None and len(pdic) > 0:
+            print(pdic)
+            self.merge_pdic(pdic)
+            self.name = pa.splitext(pa.basename(file))[0]
+            self.desc = desc
+            return len(pdic)
+        return 0
+
+    def save_file(self, file=None):
+        if file is None or file == '':
+            file = self.name + '.spr'
+        return save_spr(file, self.sprites, set_desc=self.desc)
+
     def set_patterns(self, set_name, patterndic, desc=''):
         """set external sprite-set
             patterndic: {spr1: [lines], spr2: [lines], ...}
@@ -149,6 +164,30 @@ class SpriteSet:
             return self.sprites[label]
         else:
             return None
+
+    def get_code(self, label):
+        """埋め込み用に16進表現化でリスト出力"""
+        if label in self.list():
+            q = self.sprites[label]
+        else:
+            return None
+        text = ['[',]
+        for x in q:
+            xx = list(x)
+            def tostr(l):
+                if l is None:
+                    return 'None'
+                elif isinstance(l, int):
+                    return f'0x{l:x}'
+                elif isinstance(l, str):
+                    return "'"+l+"'"
+                buf = []
+                for ll in l:
+                    buf.append(tostr(ll))
+                return '['+','.join(buf)+']'
+            text.append(f'\t[{tostr(xx[0])}, {tostr(xx[1])}],')
+        text.append('\t]',)
+        return text
 
     def size(self, label):
         """get pixel size (w,h) of label"""
@@ -233,7 +272,9 @@ class SpriteSet:
         for line in pattext:
             d = str_to_tuple(line)
             lst.append(d)
-        return self.add_bylist(label, lst)
+
+        print(lst)
+        return self.update_sprite(label, lst)
 
     def add_byimage(self, label, image, transparent=None):
         """"""
@@ -321,7 +362,7 @@ def load_spr(file:str, directory, zfile):
     if source is None and path == '':
         source = fdi.read_filez(directory+pa.sep+file, add_zip=zfile)
         if source is None:
-            return [], ''
+            return {}, ''
         
     spr_name = None
     spr_desc = None
@@ -330,8 +371,10 @@ def load_spr(file:str, directory, zfile):
 
     for line in source:
         if len(line) == 0 or line[0] == '#':  # 空行、コメント行は飛ばす
-            if spr_desc is None and len(line) > 2:
-                spr_desc = line[1:].strip()
+            if spr_desc is None and line[0] == '#':
+                spr_desc = re.sub(r'^#\s*(SET_NAME\s*=)?\s*', '',
+                                  line.strip())
+                # 最初のコメント行をdescとして保存(#と空白,"SET_NAME ="は除外)
             continue
        
         if line[0] == '[':  # [スプライト名] 行
@@ -374,13 +417,16 @@ def load_spr(file:str, directory, zfile):
     return pdic, spr_desc
 
 
-def save_spr(file:str, pdic):
+def save_spr(file:str, pdic, set_desc=None):
     """スプライトの保存"""
     file = fdi.sanitize_filename(file, force_ext='.spr')
     set_name = pa.splitext(pa.basename(file))[0]
-
+    if set_desc is None or set_desc == '':
+        set_desc = set_name
+        
     with open(file, mode='w', encoding='sjis') as f:
-        f.write(f'# SET_NAME = {set_name}\n')
+        f.write(f'# {set_desc}\n')
+        
         for item in pdic:
             f.write(f'[{item}]\n')
             buffer = []
