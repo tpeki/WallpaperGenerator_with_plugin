@@ -30,6 +30,8 @@ STAR = 8  # テープの星密度(単位長さ内の星の数, 0=なし)
 DATA_DIR = 'samples'
 ZIPFILE = 'sprites.zip'
 PALETTE_SIZE = 10
+TAPZIP = 'tylorean.zip'
+TAPEXT = '.tap'
 
 Palette = [FGCOLOR1, FGCOLOR2,  (0xdd, 0x99, 0xdd),  (0x99, 0xdd, 0x99),
            (0xee, 0xee, 0x99), (0xdd, 0x99, 0x99), (0x99, 0x99, 0xdd),
@@ -91,8 +93,9 @@ INT_PATTERNS = {
                  (9,1), (6,2), (9,2)]
                 ],  # 18px
     }
+INT_TAPESET = '--internal--'
 
-tyrolean_preserv = {'tape_pattern': 'simple',
+tyrolean_preserv = {'tape_name': 'simple',
                     'palette': Palette.copy(),
                     'basic': {'bgcolor': BGCOLOR, 'outline': OLCOLOR,
                               'fjitter': FGJITTER, 'bjitter': FGJITTER,
@@ -101,7 +104,8 @@ tyrolean_preserv = {'tape_pattern': 'simple',
                               'boder': BODER, 'spacing': SPACING
                               },
                     'deco': {'outline': OLCOLOR, 'star': STAR},
-                    'sps': None
+                    'sps': None,
+                    'tap': None,
                     }
 
 
@@ -109,8 +113,9 @@ class Tapes:
     def __init__(self):
         self.patterns = {}
         self.set_name = ''
+        self.desc = ''
         self.internal_set = copy.deepcopy(INT_PATTERNS)
-        self.internal_name = '--Internal--'
+        self.internal_name = INT_TAPESET
 
     def set_internal(self, name=None, pattern_dic=None):
         if pattern_dic is None:
@@ -118,7 +123,7 @@ class Tapes:
         self.internal_set = copy.deepcopy(pattern_dic)
 
         if name is None:
-            name = '--Internal--'
+            name = INT_TAPESET
         self.internal_name = name
 
         return len(self.internal_set)
@@ -126,7 +131,7 @@ class Tapes:
     def load_internal(self):
         self.patterns = self.internal_set.copy()
         self.set_name = self.internal_name
-
+        self.desc = 'Internal set'
 
     def list(self):
         return list(self.patterns.keys())
@@ -256,6 +261,26 @@ class Tapes:
         
         return set_name, pattern_set
 
+    def load_file(self, file_name, directory=None, add_zip=None):
+        pats, desc = load_tape_patterns(file_name, directory, add_zip)
+        if len(pats) == 0 or not isinstance(pats, dict):
+            self.__init__(self)
+        else:
+            self.set_name = pa.splitext(pa.basename(file_name))[0]
+            self.patterns = pats
+            self.desc = desc
+
+        return len(self.patterns)  # num of loaded patterns
+
+    def save_file(self, file_name=None, directory=None):
+        if file_name is None:
+            if self.set_name is None:
+                return 0
+            file_name = self.set_name + TAPEXT
+            
+        r = save_tape_patterns(self.patterns, file_name, directory, self.desc)
+        return r  # num of saved patterns
+
 
 def safe_int(s):
     try:
@@ -264,7 +289,98 @@ def safe_int(s):
         r = 0
     return r
 
-tape_pattern = copy.deepcopy(INT_PATTERNS)
+def load_tape_patterns(file_name, directory=None, add_zip=None):
+    file_name = fdi.sanitize_filename(file_name, ext=TAPEXT)
+    path, base = pa.split(file_name)
+    if directory is None or directory == '':
+        directory = DATA_DIR
+
+    source = fdi.read_filez(file_name, add_zip=add_zip)
+    if source is None and path == '':
+        source = fdi.read_filez(directory+pa.sep+file, add_zip=zfile)
+        if source is None:
+            return {}, ''
+
+    set_name = pa.splitext(base)[0]  # 使わないか
+    desc = None
+    pdic = {}
+    ptn = []
+    ptn_name = None
+
+    for line in source:
+        if len(line) == 0 or line[0] == '#':  # 空行、コメント行は飛ばす
+            if desc is None and line[0] == '#':
+                desc = re.sub(r'^#\s*', '', line.strip())
+                # 最初のコメント行をdescとして保存(#と空白,"SET_NAME ="は除外)
+            continue
+        if line[0] == '[':
+            if ptn_name is not None:
+                if len(ptn) > 0:  # 前の定義があった
+                    pdic[ptn_name] = ptn
+                    ptn = []
+                    ptn_name = None
+            m = re.match(r'^\[(.*?)\]', line)
+            if m:
+                ptn_name = m.group(1)
+            continue
+                
+        if ptn_name is None:
+            continue
+        data = str_to_tapecolumn(line)
+        if data is None:
+            continue
+        ptn.append(data)
+
+    if ptn_name is not None:
+        if len(ptn) > 0:  # 前の定義があった
+            pdic[ptn_name] = ptn
+
+    return pdic, desc        
+    
+aznum = re.compile(r'^([A-Za-z]+)(\d+)')
+
+def str_to_tapecolumn(line):
+    array = line.split(',')
+    if len(array) == 0:
+        return None
+    print(line,'\n', array)
+    array = [aznum.match(s).groups() for s in array]
+    data = []
+    for pal, length in array:
+        pal = ord(pal.upper()[0]) - ord('A')
+        length = safe_int(length)
+        if length > 0:
+            data.append((pal, length))
+    return data
+        
+def save_tape_patterns(patterns, file_name, directory=None, desc=None):
+    file_name = fdi.sanitize_filename(file_name, ext=TAPEXT)
+    set_name = pa.splitext(pa.basename(file_name))[0]
+    if desc is None or desc == '':
+        desc = set_name
+
+    with open(file_name, mode='w', encoding='sjis') as f:
+        f.write(f'# {desc}\n')
+        
+        for item in patterns:
+            f.write(f'[{item}]\n')
+            buffer = []
+            for line in patterns[item]:
+                buffer.append(tapecolumn_to_str(line))
+            f.write('\n'.join(buffer)+'\n')
+    print(f'{file_name} : wrote {len(patterns.keys())} records')
+    return set_name
+
+def tapecolumn_to_str(line):
+    buf = []
+    oa = ord('a')
+    for d in line:
+        p, l = d
+        buf.append(f'{chr(oa+p)}{l:d}')
+    return ','.join(buf)
+    
+        
+    
 # <pattern_dict> ::= {<patname>: [list([list((int, int),...)],...)], ... }
 
 INT_SETNAME = '*Sunflower*'
@@ -351,10 +467,15 @@ def default_param(p: Param):
 def set_intspr(): # -> sps.SpriteSet
     s = sps.SpriteSet()
     # s.set_internal()  # defaultset in sps
-    s.set_internal(INT_SETNAME, INT_SPRITES)  # 先頭の定義を内部定義に設定
-    s.load_internal()  # 以降、内部loadは先頭の定義に
+    s.set_internal(INT_SETNAME, INT_SPRITES)  # 内部定義を設定
+    s.load_internal()  # 内部定義をload
 
     return s
+
+def set_inttap():
+    t = Tapes()
+    t.load_internal()  # Tapesは内部定義を初期化時に取込済
+    return t
 
 
 # テープパターンの基本サイズを取得
@@ -1014,11 +1135,12 @@ def chk(tape_name=None, fringe=3, gap=3, sprname=None):
     """method=0 PIL, 1 Numpy"""
     border = '#440000'
 
-    tapes = Tapes()
-    tapes.load_internal()
-    
-    if tape_name is None:
-        tape_name = 'simple'
+    tapes = tyrolean_preserv['tap']
+    if not isinstance(tapes, Tapes):
+        tapes = Tapes()
+        tapes.load_internal()
+
+    tape_name = tyrolean_preserv['tape_name']
     if tape_name not in tapes.list():
         tape_name = next(iter(tapes.list()))
 
@@ -1057,11 +1179,10 @@ def chk(tape_name=None, fringe=3, gap=3, sprname=None):
         
 
 if __name__ == '__main__':
-    if tyrolean_preserv['sps'] is None:
-        #s = sps.SpriteSet()
-        #s.load_internal()
-        s = set_intspr()
-        tyrolean_preserv['sps'] = s
+    s = set_intspr()
+    tyrolean_preserv['sps'] = s
+    t = set_inttap()
+    tyrolean_preserv['tap'] = t
 
     p = Param()
     p = default_param(p)
