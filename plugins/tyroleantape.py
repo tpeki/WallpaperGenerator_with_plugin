@@ -26,6 +26,7 @@ ANGLE = 0  # 全体角度 degree
 
 # --- 内部定数設定 ---
 BORDER = 5  # スプライトの両側に設ける余白：テープ幅=sprite最大高＋border(pix)
+FLIP = False  # sprite配置時、上下反転したspriteを続けて配置する
 
 DATA_DIR = 'samples'
 ZIPFILE = 'sprites.zip'
@@ -39,6 +40,10 @@ Palette = [(0x99, 0xdd, 0xdd), (0xec, 0xec, 0xec), (0xdd, 0x99, 0xdd),
            (0x44, 0x44, 0x44)  
            ]
 
+# -----
+# Tape pattern (initial)
+# -----
+INT_TAPESET = '--internal--'
 INT_PATTERNS = {
     'simple': [[(0,3), (1,2), (0,10), (1,2), (0,3)]
                ],  # 20px
@@ -94,7 +99,82 @@ INT_PATTERNS = {
                  (9,1), (6,2), (9,2)]
                 ],  # 18px
     }
-INT_TAPESET = '--internal--'
+
+# -----
+# sprite pattern (initial)
+# -----
+INT_SETNAME = '*Sunflower*'
+INT_SPRITES = {
+    'pat1': [
+        [0x10, 0x10],
+        [0x180, '#FF0808'],
+        [0x6186, '#FF0808'],
+        [0x6006, '#FF0808'],
+        [0x1188, '#FF0808'],
+        [0xff0, '#FF0808'],
+        [0xc30, '#FF0808'],
+        [0x990, '#FF0808'],
+        [0xdbdb, '#FF0808'],
+        [None, 'turnover'],
+        ],
+    'pat2': [
+        [0x10, 0x10],
+        [0, '#000000'],
+        [0x80, '#FFF208'],
+        [0x258c, '#FFF208'],
+        [0x3598, '#FFF208'],
+        [0x1bd0, '#FFF208'],
+        [[0x42c, 0x180], ['#FFF208', '#A40C00']],
+        [[0x810, 0x3c0], ['#FFF208', '#A40C00']],
+        [[0x781c, 0x7e0], ['#FFF208', '#A40C00']],
+        [[0x381e, 0x7e0], ['#FFF208', '#A40C00']],
+        [[0x810, 0x3c0], ['#FFF208', '#A40C00']],
+        [[0x3420, 0x180], ['#FFF208', '#A40C00']],
+        [0xbd8, '#FFF208'],
+        [0x19ac, '#FFF208'],
+        [0x31a4, '#FFF208'],
+        [0x100, '#FFF208'],
+        [0, '#000000'],
+        ],
+    'flower': [
+        [0x10, 0x10],
+        [0xee0, '#FA3E4C'],
+        [0x1ff0, '#FA3E4C'],
+        [None, 'rep2'],
+        [0xffe, '#FA3E4C'],
+        [[0x7e7f,0x180], ['#FA3E4C','#FBF99A']],
+        [[0xf81f,0x7e0], ['#FA3E4C','#FBF99A']],
+        [None, 'rep1'],
+        [[0x7c7e,0x380], ['#FA3E4C','#FBF99A']],
+        [[0xf81c,0x7e0], ['#FA3E4C','#FBF99A']],
+        [[0x791e,0x6e0], ['#FA3E4C','#FBF99A']],
+        [0x1fff, '#FA3E4C'],
+        [0x3fff, '#FA3E4C'],
+        [0x3ffe, '#FA3E4C'],
+        [0x3e7c, '#FA3E4C'],
+        [0xc38, '#FA3E4C'],
+        ],
+    'leaf': [
+        [0x08, 0x10],
+        [0xc6, '#3f8a20'],
+        [0xee, '#3f8a20'],
+        [0x6c, '#3f8a20'],
+        [0x38, '#3f8a20'],
+        [0x10, '#3f8a20'],
+        [0xd6, '#3f8a20'],
+        [0xee, '#3f8a20'],
+        [0x7c, '#3f8a20'],
+        [0x38, '#3f8a20'],
+        [0x10, '#3f8a20'],
+        [0xd6, '#3f8a20'],
+        [0xee, '#3f8a20'],
+        [0x7c, '#3f8a20'],
+        [0x38, '#3f8a20'],
+        [0x10, '#3f8a20'],
+        [0x10, '#3f8a20'],
+        ],
+    }
+
 
 tyrolean_preserv = {'palette': Palette.copy(),
                     'basic': {'bg1': BGCOLOR1, 'bg2': BGCOLOR2,
@@ -102,6 +182,7 @@ tyrolean_preserv = {'palette': Palette.copy(),
                               'fjitter': FGJITTER, 'bjitter': BGJITTER,
                               'zoom': ZOOM, 'spacing': SPACING,
                               'angle': ANGLE, 'border': BORDER,
+                              'flip': FLIP,
                               },
                     'sps': None,
                     'tap': None,
@@ -450,59 +531,6 @@ def tapecolumn_to_str(line):
     
 # <pattern_dict> ::= {<patname>: [list([list((int, int),...)],...)], ... }
 
-INT_SETNAME = '*Sunflower*'
-INT_SPRITES = {
-    'pat1': [
-        [0x10, 0x10],
-        [0x180, '#FF0808'],
-        [0x6186, '#FF0808'],
-        [0x6006, '#FF0808'],
-        [0x1188, '#FF0808'],
-        [0xff0, '#FF0808'],
-        [0xc30, '#FF0808'],
-        [0x990, '#FF0808'],
-        [0xdbdb, '#FF0808'],
-        [None, 'turnover'],
-        ],
-    'pat2': [
-        [0x10, 0x10],
-        [0, '#000000'],
-        [0x80, '#FFF208'],
-        [0x258c, '#FFF208'],
-        [0x3598, '#FFF208'],
-        [0x1bd0, '#FFF208'],
-        [[0x42c, 0x180], ['#FFF208', '#A40C00']],
-        [[0x810, 0x3c0], ['#FFF208', '#A40C00']],
-        [[0x781c, 0x7e0], ['#FFF208', '#A40C00']],
-        [[0x381e, 0x7e0], ['#FFF208', '#A40C00']],
-        [[0x810, 0x3c0], ['#FFF208', '#A40C00']],
-        [[0x3420, 0x180], ['#FFF208', '#A40C00']],
-        [0xbd8, '#FFF208'],
-        [0x19ac, '#FFF208'],
-        [0x31a4, '#FFF208'],
-        [0x100, '#FFF208'],
-        [0, '#000000'],
-        ],
-    'flower': [
-        [0x10, 0x10],
-        [0xee0, '#FA3E4C'],
-        [0x1ff0, '#FA3E4C'],
-        [None, 'rep2'],
-        [0xffe, '#FA3E4C'],
-        [[0x7e7f,0x180], ['#FA3E4C','#FBF99A']],
-        [[0xf81f,0x7e0], ['#FA3E4C','#FBF99A']],
-        [None, 'rep1'],
-        [[0x7c7e,0x380], ['#FA3E4C','#FBF99A']],
-        [[0xf81c,0x7e0], ['#FA3E4C','#FBF99A']],
-        [[0x791e,0x6e0], ['#FA3E4C','#FBF99A']],
-        [0x1fff, '#FA3E4C'],
-        [0x3fff, '#FA3E4C'],
-        [0x3ffe, '#FA3E4C'],
-        [0x3e7c, '#FA3E4C'],
-        [0xc38, '#FA3E4C'],
-        ],
-
-    }
 
 # module基本情報
 def intro(modlist: Modules, module_name):
