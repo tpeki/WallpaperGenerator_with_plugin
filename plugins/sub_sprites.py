@@ -133,7 +133,7 @@ class SpriteSet:
     def load_file(self, file, directory=None, add_zip=None):
         pdic, desc = load_spr(file, directory, add_zip)
         if pdic is not None and len(pdic) > 0:
-            print(pdic)
+            # print(pdic)
             self.merge_pdic(pdic)
             self.name = pa.splitext(pa.basename(file))[0]
             self.desc = desc

@@ -13,36 +13,37 @@ from plugins import sub_sprites as sps
 # --- 定数設定 ---
 WIDTH = 1920
 HEIGHT = 1080
-FGCOLOR1 = (0x99, 0xdd, 0xdd)  # テープ基本色1
-FGCOLOR2 = (0xec, 0xec, 0xec)  # テープ基本色2
-BGCOLOR =  (0xc6, 0xc6, 0xc6) # 背景基本色
-FGJITTER = 30  # テープ色ゆらぎ FGC1 +/- FGJitter, FGC2 +/- FGJitter, 
-BGJITTER = 50  # 背景色ゆらぎ  Gradation(BG +/- BGJitter,BG +/- BGJitter)
-BRIGHT = 100  # 前景明度
+BGCOLOR1 = (0xc6, 0xc6, 0xc6) # 背景基本色
+BGCOLOR2 = (0xa6, 0xa6, 0xd6) # 背景基本色2
+OLCOLOR = (0, 0, 0x11)   # spriteアウトライン色初期値
+FGJITTER = 30  # テープ色ゆらぎ Palette +/- FGJitter, 
+BGJITTER = 50  # 背景色ゆらぎ  Gradation(BG1 +/- BGJitter,BG2 +/- BGJitter)
 # 単位面積 = テープ幅×(利用spr幅+spr間隔)+利用spr数
-PATTERN_SIZE = 4  # multiplier
-BODER = 5  # テープ幅=スプライト最大高さ＋border(pix)
+ZOOM = 4  # multiplier テープ幅倍率 
 SPACING = 4  # spr間隔(pix)
+ANGLE = 0  # 全体角度 degree
+# sprite配置しない場合は無視
 
 # --- 内部定数設定 ---
-OLCOLOR = '#000011'   # sprite outline
-STAR = 8  # テープの星密度(単位長さ内の星の数, 0=なし)
+BORDER = 5  # スプライトの両側に設ける余白：テープ幅=sprite最大高＋border(pix)
+
 DATA_DIR = 'samples'
 ZIPFILE = 'sprites.zip'
 PALETTE_SIZE = 10
 TAPZIP = 'tylorean.zip'
 TAPEXT = '.tap'
 
-Palette = [FGCOLOR1, FGCOLOR2,  (0xdd, 0x99, 0xdd),  (0x99, 0xdd, 0x99),
-           (0xee, 0xee, 0x99), (0xdd, 0x99, 0x99), (0x99, 0x99, 0xdd),
-           (0xee, 0xbb, 0x99), (0xbb, 0x99, 0xee), (0x44, 0x44, 0x44)  
+Palette = [(0x99, 0xdd, 0xdd), (0xec, 0xec, 0xec), (0xdd, 0x99, 0xdd),
+           (0x99, 0xdd, 0x99), (0xee, 0xee, 0x99), (0xdd, 0x99, 0x99),
+           (0x99, 0x99, 0xdd), (0xee, 0xbb, 0x99), (0xbb, 0x99, 0xee),
+           (0x44, 0x44, 0x44)  
            ]
 
 INT_PATTERNS = {
-    'flat': [[(0,18)]
-             ],  # 18px
     'simple': [[(0,3), (1,2), (0,10), (1,2), (0,3)]
                ],  # 20px
+    'flat': [[(0,18)]
+             ],  # 18px
     'cross': [[(0,2), (1,2), (0,1), (1,2), (2,1), (1,1), (2,1), (1,2),
                (0,1), (1,2), (0,2)],
               [(0,2), (1,3), (0,1), (1,2), (2,1), (1,2), (0,1), (1,3), (0,2)],
@@ -95,17 +96,16 @@ INT_PATTERNS = {
     }
 INT_TAPESET = '--internal--'
 
-tyrolean_preserv = {'tape_name': 'simple',
-                    'palette': Palette.copy(),
-                    'basic': {'bgcolor': BGCOLOR, 'outline': OLCOLOR,
-                              'fjitter': FGJITTER, 'bjitter': FGJITTER,
-                              'bright': 100,
-                              'psize': PATTERN_SIZE,
-                              'boder': BODER, 'spacing': SPACING
+tyrolean_preserv = {'palette': Palette.copy(),
+                    'basic': {'bg1': BGCOLOR1, 'bg2': BGCOLOR2,
+                              'outline': OLCOLOR,
+                              'fjitter': FGJITTER, 'bjitter': BGJITTER,
+                              'zoom': ZOOM, 'spacing': SPACING,
+                              'angle': ANGLE, 'border': BORDER,
                               },
-                    'deco': {'outline': OLCOLOR, 'star': STAR},
                     'sps': None,
                     'tap': None,
+                    'tape_name': None,
                     }
 
 
@@ -281,6 +281,75 @@ class Tapes:
         r = save_tape_patterns(self.patterns, file_name, directory, self.desc)
         return r  # num of saved patterns
 
+class Tylorean:
+    def __init__(self, pattern, palette=Palette):
+        self.pattern = copy.deepcopy(pattern)  # 2次元配列なので引数はlocalに
+        self.palette = copy.deepcopy(palette)
+        self.sprites = []
+        self.spr_h = 0
+        tw = 0
+        for col in self.pattern:
+            cw = sum([y for x,y in col])
+            tw = max(tw, cw)
+        self.p_height = tw  # パターンの最大幅
+        self.p_width = len(self.pattern)  # テープの最小繰り返し幅
+        self.image = None  # image()で後から生成
+
+    def put_sprite(self, sprite_image, shrink=False):
+        w,h = sprite_image.size
+        if self.spr_h < h and shrink:
+            spr_w = int(w * (self.spr_h / h))
+            sprite_image = sprite_image.resize((spr_w, self.spr_h),
+                                               resample=Image.LANCZOS)
+        self.sprites.append(sprite_image)
+        
+        return len(self.sprites)-1
+
+    def sprite_height(self, limit=0):
+        """limit=0:最大sprite高 n:制限高"""
+        if len(self.sptrites) == 0:
+            return 0
+        if limit == 0:
+            return max([x.height for x in self.splites])
+        else:
+            self.spr_h = limit
+            return limit
+
+    def image(self, height, length):
+        """height=0: sprite_height based, n:limitted_height
+            length: > 0"""
+        border = tyrolean_preserv['basic']['border']
+        spacing = tyrolean_preserv['basic']['spacing']
+
+        lheight = self.spr_h
+        if lheight == 0:
+            lheight = self.sprite_height(0)
+
+        lheight = min(height, lheight)
+        
+        spr_img = []
+        for x in self.sprites:
+            if x.height > lheight:
+                w = int(x.width * (lheight/x.height))
+                x.resize((w, lheight), resample=Image.LANCZOS)
+            spr_img.append(x)
+        
+        tape_height = border + lheight
+        tape_img = tape_image(self.pattern, self.palette, length)
+        pos = 0
+        c = 0
+        cmax = len(spr_img)
+        while True:
+            if pos > length:
+                break
+            h = spr_img[c].height
+            h = (tape_height - h)//2
+            tape_img.paste(spr_img[c], (pos,h), spr_img[c])
+            pos += spr_img[c].width + spacing
+            c = (c+1) % cmax
+
+        return tape_image
+
 
 def safe_int(s):
     try:
@@ -379,8 +448,6 @@ def tapecolumn_to_str(line):
         buf.append(f'{chr(oa+p)}{l:d}')
     return ','.join(buf)
     
-        
-    
 # <pattern_dict> ::= {<patname>: [list([list((int, int),...)],...)], ... }
 
 INT_SETNAME = '*Sunflower*'
@@ -440,27 +507,37 @@ INT_SPRITES = {
 # module基本情報
 def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, 'チロリアンテープ',
-                       {'color1':'テープ色1', 'color2':'テープ色2',
-                        'color3':'背景色',
+                       {'color1':'背景色1', 'color2':'背景色2',
+                        'color3':'縁取り色',
                         'color_jitter':'前景揺らぎ', 'sub_jitter':'背景揺らぎ',
-                        'sub_jitter2':'明度(%)',
-                        'pwidth':'キャラ拡大率', 'pheight':'縁幅',
-                        'pdepth':'キャラ間隔'})
+                        'pwidth':'ズーム率', 'pheight':'キャラ間隔',
+                        'pdepth':'角度'})
     return module_name
 
 
 # おすすめパラメータ
 def default_param(p: Param):
-    p.color1.itoc(*Palette[0])
-    p.color2.itoc(*Palette[1])
-    p.color3.itoc(*BGCOLOR)
+    p.color1.itoc(*BGCOLOR1)
+    p.color2.itoc(*BGCOLOR2)
+    p.color3.itoc(*OLCOLOR)
     p.color_jitter = FGJITTER
     p.sub_jitter = BGJITTER
-    p.sub_jitter2 = BRIGHT
-    p.pwidth = PATTERN_SIZE
-    p.pheight = BODER
-    p.pdepth = SPACING
+    p.pwidth = ZOOM
+    p.pheight = SPACING
+    p.pdepth = ANGLE
     return p
+
+
+def set_preserv(p):
+    bdic = tylorean_preserv['basic']
+    bdic['bg1'] = p.color1.ctoi()
+    bdic['bg2'] = p.color2.ctoi()
+    bdic['outline'] = p.color3.ctoi()
+    bdic['fjitter'] = p.color_jitter
+    bdic['bjitter'] = p.sub_jitter
+    bdic['zoom'] = p.pwidth
+    bdic['spacing'] = p.pheight
+    bdic['angle'] = p.pdepth
 
 
 # 基本スプライトの設定
@@ -578,6 +655,36 @@ def tape_numpy(pat_name: str, length: int,
         y = 0
         for pal_idx, count in col:
             color = Palette[pal_idx]
+            unit_matrix[y:y+count, x] = color
+            y += count
+            
+    # 横方向にリピートして指定の length にスライス
+    repeats = (length // num_cols) + 1
+    full_matrix = np.tile(unit_matrix, (1, repeats, 1))[:, :length, :]
+
+    h,w,_ = full_matrix.shape
+    rgba = np.dstack([full_matrix, np.full((h, w), 255, np.uint8)])
+    
+    return Image.fromarray(rgba,'RGBA')
+
+def tape_image(pattern: list, palette: list, length: int) -> Image.Image:
+    """
+    指定されたパターン名と長さ(幅)に基づいてテープ画像を生成する
+    
+    :param pattern: パターンデータ
+    :param palette: パレットデータ
+    :param length: 描画するテープの長さ（画像の横幅 px）
+    :return: PIL.Image オブジェクト (RGBモード)
+    """
+    num_cols, tape_height = check_pat_size(pattern)
+    
+    # パターン1ユニット分(高さ × 列数)の配列を作成
+    unit_matrix = np.zeros((tape_height, num_cols, 3), dtype=np.uint8)
+    
+    for x, col in enumerate(pattern):
+        y = 0
+        for pal_idx, count in col:
+            color = palette[pal_idx]
             unit_matrix[y:y+count, x] = color
             y += count
             
@@ -854,7 +961,7 @@ def outlined(image, width, border='#000000'):
     if width == 0:
         return image
     contour = image.filter(ImageFilter.CONTOUR)
-    bim = Image.new('RGB',image.size, border)
+    bim = Image.new('RGB',image.size, rgb_string(border))
     if width ==1:
         mask = ImageOps.invert(contour.convert('L'))
     else:
@@ -1131,24 +1238,29 @@ def generate(p: Param):
 
 # ------------------------------------------------------------------------
 import time
-def chk(tape_name=None, fringe=3, gap=3, sprname=None):
-    """method=0 PIL, 1 Numpy"""
-    border = '#440000'
-
+def chk(tape_name=None, fringe=3, gap=3, spr_set=None, spr_name=None):
+    """動作チェック： 完成版では削除"""
     tapes = tyrolean_preserv['tap']
     if not isinstance(tapes, Tapes):
         tapes = Tapes()
         tapes.load_internal()
 
-    tape_name = tyrolean_preserv['tape_name']
+    if tape_name is not None:
+        tape_name = tyrolean_preserv['tape_name']
     if tape_name not in tapes.list():
         tape_name = next(iter(tapes.list()))
 
-    s = set_intspr()
-    if sprname is None:
-        sprname = next(iter(s.list()))
+    if spr_set is None:
+        s = tyrolean_preserv['sps']
+    else:
+        s = sps.SpriteSet()
+        s.load_file(spr_set, '..\\samples', ZIPFILE)
+        print(s.list())
+    if spr_name is None:
+        spr_name = next(iter(s.list()))
 
-    spr = s.image_with_border(sprname, border_color=border)
+    border = tyrolean_preserv['basic']['outline']
+    spr = s.image_with_border(spr_name, border_color=border)
     sprw, sprh = spr.size
     tapew, tapeh = tapes.size(tape_name)
 
