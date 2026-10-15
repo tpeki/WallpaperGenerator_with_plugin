@@ -25,14 +25,21 @@ ANGLE = 0  # 全体角度 degree
 # sprite配置しない場合は無視
 
 # --- 内部定数設定 ---
-BORDER = 5  # スプライトの両側に設ける余白：テープ幅=sprite最大高＋border(pix)
-FLIP = False  # sprite配置時、上下反転したspriteを続けて配置する
+MARGIN = 5  # スプライトの両側に設ける余白：テープ幅=sprite最大高＋border(pix)
+FLIP = 0  # sprite配置時、反転spriteを続けて配置する bit1:up/down bit2:left/right
 
 DATA_DIR = 'samples'
 ZIPFILE = 'sprites.zip'
+SPSEXT = '.spr'
 PALETTE_SIZE = 10
 TAPZIP = 'tylorean.zip'
 TAPEXT = '.tap'
+TY_THUMB = (300,60)
+
+if __name__ == '__main__':
+    PRFX = '../'
+else:
+    PRFX = ''
 
 Palette = [(0x99, 0xdd, 0xdd), (0xec, 0xec, 0xec), (0xdd, 0x99, 0xdd),
            (0x99, 0xdd, 0x99), (0xee, 0xee, 0x99), (0xdd, 0x99, 0x99),
@@ -43,11 +50,22 @@ Palette = [(0x99, 0xdd, 0xdd), (0xec, 0xec, 0xec), (0xdd, 0x99, 0xdd),
 # -----
 # Tape pattern (initial)
 # -----
-INT_TAPESET = '--internal--'
+INT_TAPESET = '*internal*'
 INT_PATTERNS = {
     'simple': [[(0,3), (1,2), (0,10), (1,2), (0,3)]
                ],  # 20px
-    'flat': [[(0,18)]
+    'flat': [[(2,18)],
+             ],
+    'wavy': [[(0,18)],
+             [(0,17),(10,1)],
+             [(0,15),(10,3)],
+             [(0,16),(10,2)],
+             [(0,18)],
+             [(10,1),(0,17)],
+             [(10,2),(0,16)],
+             [(10,2),(0,16)],
+             [(10,1),(0,17)],
+             [(10,1),(0,17)],
              ],  # 18px
     'cross': [[(0,2), (1,2), (0,1), (1,2), (2,1), (1,1), (2,1), (1,2),
                (0,1), (1,2), (0,2)],
@@ -136,7 +154,7 @@ INT_SPRITES = {
         [0x100, '#FFF208'],
         [0, '#000000'],
         ],
-    'flower': [
+    'flower_r': [
         [0x10, 0x10],
         [0xee0, '#FA3E4C'],
         [0x1ff0, '#FA3E4C'],
@@ -153,6 +171,24 @@ INT_SPRITES = {
         [0x3ffe, '#FA3E4C'],
         [0x3e7c, '#FA3E4C'],
         [0xc38, '#FA3E4C'],
+        ],
+    'flower_y': [
+        [0x10, 0x10],
+        [0xee0, '#F4E769'],
+        [0x1ff0, '#F4E769'],
+        [None, 'rep2'],
+        [0xffe, '#F4E769'],
+        [[0x7e7f,0x180], ['#F4E769','#92111B']],
+        [[0xf81f,0x7e0], ['#F4E769','#92111B']],
+        [None, 'rep1'],
+        [[0x7c7e,0x380], ['#F4E769','#92111B']],
+        [[0xf81c,0x7e0], ['#F4E769','#92111B']],
+        [[0x791e,0x6e0], ['#F4E769','#92111B']],
+        [0x1fff, '#F4E769'],
+        [0x3fff, '#F4E769'],
+        [0x3ffe, '#F4E769'],
+        [0x3e7c, '#F4E769'],
+        [0xc38, '#F4E769'],
         ],
     'leaf': [
         [0x08, 0x10],
@@ -181,19 +217,20 @@ tyrolean_preserv = {'palette': Palette.copy(),
                               'outline': OLCOLOR,
                               'fjitter': FGJITTER, 'bjitter': BGJITTER,
                               'zoom': ZOOM, 'spacing': SPACING,
-                              'angle': ANGLE, 'border': BORDER,
-                              'flip': FLIP,
+                              'angle': ANGLE, 'margin': MARGIN,
+                              'flip': FLIP, 'twopt': Image.NEAREST, # Image.LANCZOS
                               },
                     'sps': None,
                     'tap': None,
                     'tape_name': None,
+                    'tplist': [],
                     }
 
 
 class Tapes:
     def __init__(self):
         self.patterns = {}
-        self.set_name = ''
+        self.name = ''
         self.desc = ''
         self.internal_set = copy.deepcopy(INT_PATTERNS)
         self.internal_name = INT_TAPESET
@@ -211,7 +248,7 @@ class Tapes:
 
     def load_internal(self):
         self.patterns = self.internal_set.copy()
-        self.set_name = self.internal_name
+        self.name = self.internal_name
         self.desc = 'Internal set'
 
     def list(self):
@@ -227,10 +264,14 @@ class Tapes:
         return check_pat_size(self.patterns[label])
 
     def image(self, label, length=None):
+        if not label in self.patterns:
+            return None
         if length is None:
             length,h = self.size(label)
-
-        return tape_numpy(label, int(length), self.patterns)
+        
+        pattern = self.patterns[label]
+        palette = tyrolean_preserv['palette']  # default palette
+        return tape_image(pattern, palette, int(length))
 
     def set_patterns(self, set_name, pattern_dic):
         if pattern_dic is None:
@@ -337,7 +378,7 @@ class Tapes:
 
         if len(pattern_set) == 0:
             return None, None
-        self.set_name = setname
+        self.name = set_name
         self.patterns = pattern_set
         
         return set_name, pattern_set
@@ -347,7 +388,7 @@ class Tapes:
         if len(pats) == 0 or not isinstance(pats, dict):
             self.__init__(self)
         else:
-            self.set_name = pa.splitext(pa.basename(file_name))[0]
+            self.name = pa.splitext(pa.basename(file_name))[0]
             self.patterns = pats
             self.desc = desc
 
@@ -355,15 +396,18 @@ class Tapes:
 
     def save_file(self, file_name=None, directory=None):
         if file_name is None:
-            if self.set_name is None:
+            if self.name is None:
                 return 0
-            file_name = self.set_name + TAPEXT
+            file_name = self.name + TAPEXT
             
         r = save_tape_patterns(self.patterns, file_name, directory, self.desc)
         return r  # num of saved patterns
 
+
 class Tylorean:
-    def __init__(self, pattern, palette=Palette):
+    def __init__(self, pattern, palette=None):
+        if palette is None:
+            palette = Palette
         self.pattern = copy.deepcopy(pattern)  # 2次元配列なので引数はlocalに
         self.palette = copy.deepcopy(palette)
         self.sprites = []
@@ -375,6 +419,7 @@ class Tylorean:
         self.p_height = tw  # パターンの最大幅
         self.p_width = len(self.pattern)  # テープの最小繰り返し幅
         self.image = None  # image()で後から生成
+        
 
     def put_sprite(self, sprite_image, shrink=False):
         w,h = sprite_image.size
@@ -388,48 +433,90 @@ class Tylorean:
 
     def sprite_height(self, limit=0):
         """limit=0:最大sprite高 n:制限高"""
-        if len(self.sptrites) == 0:
+        if len(self.sprites) == 0:
             return 0
         if limit == 0:
-            return max([x.height for x in self.splites])
+            return max([x.height for x in self.sprites])
         else:
             self.spr_h = limit
             return limit
 
-    def image(self, height, length):
+
+    def weave(self, height, length):
         """height=0: sprite_height based, n:limitted_height
             length: > 0"""
-        border = tyrolean_preserv['basic']['border']
+        margin = tyrolean_preserv['basic']['margin']
         spacing = tyrolean_preserv['basic']['spacing']
+        twopt = tyrolean_preserv['basic']['twopt']
+
+        if len(self.sprites) == 0:  # spriteなし
+            if height != 0:
+                th = check_pat_size(self.pattern) + margin*2
+                sr = height / th
+                tape_img = tape_image(self.pattern, self.palette,
+                                      int(length/sr))
+                
+                tape_img = tape_img.resize((length, th), twopt)
+            else:
+                tape_img = tape_image(self.pattern, self.palette, length)
+            return tape_img
+
+        
+        print(margin, spacing)
 
         lheight = self.spr_h
         if lheight == 0:
             lheight = self.sprite_height(0)
 
-        lheight = min(height, lheight)
+        if height > 0:
+            lheight = height
         
         spr_img = []
+        swidth = 0
         for x in self.sprites:
             if x.height > lheight:
                 w = int(x.width * (lheight/x.height))
                 x.resize((w, lheight), resample=Image.LANCZOS)
+            swidth += x.width
             spr_img.append(x)
-        
-        tape_height = border + lheight
-        tape_img = tape_image(self.pattern, self.palette, length)
+
+        swidth += len(self.sprites)*spacing
+        tape_height = lheight + margin*2
+        simage = Image.new('RGBA', (swidth, tape_height), (0,0,0,0))
+
         pos = 0
-        c = 0
-        cmax = len(spr_img)
+        for x in self.sprites:
+            y = (tape_height - x.height)//2
+            simage.paste(x, (pos, y), x)
+            pos += x.width + spacing
+        
+        flip = tyrolean_preserv['basic']['flip']
+        flip_img = ImageOps.flip(simage) if flip & 1 else simage
+        flip_img = ImageOps.mirror(flip_img) if flip & 2 else flip_img
+
+        
+        _, th = check_pat_size(self.pattern)
+        sr = tape_height / th
+
+        tape_img = tape_image(self.pattern, self.palette, int(length/sr))
+        tape_img = tape_img.resize((length, tape_height), twopt)
+        #tape_img.show()
+
+        print((length, tape_height))
+        
+        pos = 0
         while True:
             if pos > length:
                 break
-            h = spr_img[c].height
-            h = (tape_height - h)//2
-            tape_img.paste(spr_img[c], (pos,h), spr_img[c])
-            pos += spr_img[c].width + spacing
-            c = (c+1) % cmax
 
-        return tape_image
+            tape_img.paste(simage, (pos, 0), simage)
+            pos += swidth
+            if flip != 0:
+                tape_img.paste(flip_img, (pos, 0), flip_img)
+                pos += swidth
+            
+        self.image = tape_img
+        return tape_img
 
 
 def safe_int(s):
@@ -529,7 +616,14 @@ def tapecolumn_to_str(line):
         buf.append(f'{chr(oa+p)}{l:d}')
     return ','.join(buf)
     
-# <pattern_dict> ::= {<patname>: [list([list((int, int),...)],...)], ... }
+
+def tapfile_list(directory, zfile):
+    """テープセットファイルの取得"""
+    patn = directory+pa.sep+'*'+TAPEXT
+    files = [fn.replace(TAPEXT,'') \
+             for fn in fdi.glob_filelistz(patn, add_zip=zfile)]
+    # files.append(INT_SETNAME)  # internalは呼び出し元で追加する
+    return files
 
 
 # module基本情報
@@ -586,114 +680,17 @@ def set_inttap():
 # テープパターンの基本サイズを取得
 def check_pat_size(pattern):
     """patternの周期長、テープ幅を取得 -> (W, H)"""
-    w = []
+    h = []
     #try:
     for x in pattern:
         linemax = sum([j for i,j in x])
-        w.append(linemax)
+        h.append(linemax)
         #print(linemax, x)
         
-    return len(pattern), max(w)
+    return len(pattern), max(h)
     #except ValueError:
      #   return None
 
-
-def tape_pil(pat_name: str, length: int,
-             pattern_dict: dict = None) -> Image.Image:
-    """
-    指定されたパターン名と長さ(幅)に基づいてテープ画像を生成する
-    
-    :param pat_name: パターン名 ('simple', 'cross' など)
-    :param length: 描画するテープの長さ（画像の横幅 px）
-    :param pattern_dict: パターン辞書
-    :return: PIL.Image オブジェクト (RGBモード)
-    """
-    if pattern_dict is None:
-        pattern_dict = tape_pattern
-    if pat_name not in pattern_dict:
-        print(f"パターン '{pat_name}' が存在しないので暫定パターンを利用します")
-        pat_name = next(iter(pattern_dict.keys()))
-    
-    cols_data = pattern_dict[pat_name]
-    num_cols, tape_height = check_pat_size(cols_data)
-    
-    # 1. 1列ごとのピクセル列を作成
-    pattern_columns = []
-    for col in cols_data:
-        pixels = []
-        for palette_idx, count in col:
-            pixels.extend([palette_idx] * count)
-        pattern_columns.append(pixels)
-    
-    # 2. パターンユニット（基本周期）の画像を作成
-    unit_img = Image.new('P', (num_cols, tape_height))
-    
-    # パレット情報を登録 (PILの'P'モード用)
-    flat_palette = [c for color in Palette for c in color]
-    #print(flat_palette)
-    # 256色分までフラットなリストを補完
-    flat_palette += [0] * (768 - len(flat_palette))
-    unit_img.putpalette(flat_palette)
-    
-    # ピクセルデータを敷き詰める
-    unit_pixels = []
-    for y in range(tape_height):
-        for x in range(num_cols):
-            if len(pattern_columns[x])>y:
-                unit_pixels.append(pattern_columns[x][y])
-            
-    unit_img.putdata(unit_pixels)
-    
-    # 3. 指定した length (横幅) までタイル状に敷き詰めて切り出す
-    repeats = (length // num_cols) + 1
-    tiled_img = Image.new('P', (num_cols * repeats, tape_height))
-    tiled_img.putpalette(flat_palette)
-    
-    for i in range(repeats):
-        tiled_img.paste(unit_img, (i * num_cols, 0))
-        
-    # 指定サイズにクロップしてRGB変換して返す
-    final_img = tiled_img.crop((0, 0, length, tape_height)).convert('RGB')
-    return final_img
-
-
-def tape_numpy(pat_name: str, length: int,
-               pattern_dict: dict = None) -> Image.Image:
-    """
-    指定されたパターン名と長さ(幅)に基づいてテープ画像を生成する
-    
-    :param pat_name: パターン名 ('simple', 'cross' など)
-    :param length: 描画するテープの長さ（画像の横幅 px）
-    :param pattern_dict: パターン辞書
-    :return: PIL.Image オブジェクト (RGBモード)
-    """
-    if pattern_dict is None:
-        pattern_dict = tape_pattern
-    if pat_name not in pattern_dict:
-        print(f"パターン '{pat_name}' が存在しないので暫定パターンを利用します")
-        pat_name = next(iter(pattern_dict.keys()))
-        
-    cols_data = pattern_dict[pat_name]
-    num_cols, tape_height = check_pat_size(cols_data)
-    
-    # パターン1ユニット分(高さ × 列数)の配列を作成
-    unit_matrix = np.zeros((tape_height, num_cols, 3), dtype=np.uint8)
-    
-    for x, col in enumerate(cols_data):
-        y = 0
-        for pal_idx, count in col:
-            color = Palette[pal_idx]
-            unit_matrix[y:y+count, x] = color
-            y += count
-            
-    # 横方向にリピートして指定の length にスライス
-    repeats = (length // num_cols) + 1
-    full_matrix = np.tile(unit_matrix, (1, repeats, 1))[:, :length, :]
-
-    h,w,_ = full_matrix.shape
-    rgba = np.dstack([full_matrix, np.full((h, w), 255, np.uint8)])
-    
-    return Image.fromarray(rgba,'RGBA')
 
 def tape_image(pattern: list, palette: list, length: int) -> Image.Image:
     """
@@ -708,24 +705,116 @@ def tape_image(pattern: list, palette: list, length: int) -> Image.Image:
     
     # パターン1ユニット分(高さ × 列数)の配列を作成
     unit_matrix = np.zeros((tape_height, num_cols, 3), dtype=np.uint8)
+    unit_alpha = np.full((tape_height, num_cols),255, dtype=np.uint8)
     
     for x, col in enumerate(pattern):
         y = 0
         for pal_idx, count in col:
-            color = palette[pal_idx]
-            unit_matrix[y:y+count, x] = color
+            if pal_idx == 10:
+                unit_alpha[y:y+count,x] = 0
+            else:
+                color = palette[pal_idx]
+                unit_matrix[y:y+count, x] = color
             y += count
+        if y < tape_height:
+            unit_alpha[y:tape_height, x] = 0
             
     # 横方向にリピートして指定の length にスライス
     repeats = (length // num_cols) + 1
     full_matrix = np.tile(unit_matrix, (1, repeats, 1))[:, :length, :]
+    alpha = np.tile(unit_alpha, (1, repeats))[:, :length]
 
-    h,w,_ = full_matrix.shape
-    rgba = np.dstack([full_matrix, np.full((h, w), 255, np.uint8)])
-    
+    #h,w,_ = full_matrix.shape
+    #rgba = np.dstack([full_matrix, np.full((h, w), 255, np.uint8)])
+    rgba = np.dstack([full_matrix, alpha])
+   
     return Image.fromarray(rgba,'RGBA')
 
 
+# -----
+# テープ要素を組み合わせる
+# -----
+def collect_parts(number):
+    """number: 0..9 テープ番号
+       テープ要素の組み合わせ編集ダイアログ"""
+    tt = len(tyrolean_preserv['tplist'])
+    dsps = tyrolean_preserv['sps'].name
+    tapset = tyrolean_preserv['tap']
+    taps = tapset.name
+    tapname = tyrolean_preserv['tape_name']
+
+    if number < tt:
+        cur_ty = tyrolean_preserv['tplist'][number]
+    elif number == tt:
+        if tapname is None:
+            tapname = next(iter(tapset.list()))
+        pat = tapset.get(tapname)
+        cur_ty = Tylorean(pat, Palette)
+        tyrolean_preserv['tplist'].append(cur_ty)
+    else:
+        return None
+        
+    print('--- tyrolean created ---')
+    spslist = sps.sprfile_list(PRFX+DATA_DIR, ZIPFILE)  # PRFX+は後で削除
+    taplist = tapfile_list(PRFX+DATA_DIR, TAPZIP)       # PRFX+は後で削除
+    spsel = [sg.Text('Sprite set:', width=10),
+             sg.Combo(values=spslist, key='-spsl-', readonly=True),
+             sg.Combo(values=[], key='-sprl-', readonly=True),
+             sg.Button('Add', key='-spadd-', background_color='#ddddff'),
+             ]
+    tpsel = [sg.Text('Tape set:', width=10),
+             sg.Combo(values=taplist, key='-tpsl-', readonly=True),
+             sg.Combo(values=[], key='-tapl-', readonly=True),
+             sg.Button('Select', key='-tapch-', background_color='#ffbbdd'),
+             ]
+
+    tyimg = tapethumb(cur_ty)
+    preview = sg.Image(data=tyimg, key='-preview-', size=TY_THUMB,
+                       resize_type=sg.utils.ImageResizeType.FIT_WIDTH)
+    
+    
+
+
+
+
+
+
+    
+
+
+def tapethumb(ty: Tylorean):
+    w0,h0 = TY_THUMB
+
+    if ty.image is None:
+        tyimg = ty.weave(0, w0)
+    else:
+        tyimg = ty.image
+
+    w,h = tyimg.size
+    if h > h0:
+        tyimg = tyimg.thumbnail((int(w*h0/h), h0))  # 幅広なら縮小
+        h = h0
+    if tyimg.width > w0:
+        w = w0
+
+    if w < tyimg.width or h < tyimg.height:
+        tyimg = tyimg.crop((w,h))
+    #tyimg = tyimg.resize((w*2,h*2), resample=Image.LANCZOS)
+    
+    return tyimg
+    
+
+
+
+
+
+
+
+
+
+
+
+#-----------------------------------------------------------------------
 # -----
 # 表示スプライトの選択
 # -----
@@ -1273,7 +1362,7 @@ def chk(tape_name=None, fringe=3, gap=3, spr_set=None, spr_name=None):
         tapes = Tapes()
         tapes.load_internal()
 
-    if tape_name is not None:
+    if tape_name is None:
         tape_name = tyrolean_preserv['tape_name']
     if tape_name not in tapes.list():
         tape_name = next(iter(tapes.list()))
@@ -1285,37 +1374,17 @@ def chk(tape_name=None, fringe=3, gap=3, spr_set=None, spr_name=None):
         s.load_file(spr_set, '..\\samples', ZIPFILE)
         print(s.list())
     if spr_name is None:
-        spr_name = next(iter(s.list()))
+        spr_name = s.list()
+
+    ty = Tylorean(tapes.get(tape_name), Palette)
 
     border = tyrolean_preserv['basic']['outline']
-    spr = s.image_with_border(spr_name, border_color=border)
-    sprw, sprh = spr.size
-    tapew, tapeh = tapes.size(tape_name)
+    for spr in spr_name:
+        simg = s.image_with_border(spr, border_color=border)
+        ty.put_sprite(simg)
 
-    sr = (sprh+fringe*2)/tapeh
-
-    print(f'SPR:{sprw},{sprh}->{sprw+fringe*2},{sprh+fringe*2} Tape: {tapew},{tapeh} Sr:{sr}')
-    if sr < 1:
-        spr = spr.resize((int(sprw/sr), int(sprh/sr)),
-                         resample=Image.NEAREST)
-        sprw, sprh = spr.size
-        sr = 1.0
-
-    print(f'SPR:{sprw},{sprh}->{sprw+fringe*2},{sprh+fringe*2} Tape: {tapew},{tapeh} Sr:{sr}')
-
-    length = 1920/sr
-    twidth = int(tapeh*sr)
     
-    im = tapes.image(tape_name, int(length))
-    im = im.resize((1920, twidth), resample=Image.BICUBIC) #NEAREST) #
-
-    yo = (twidth-sprh)//2
-    pos = 0
-    while pos < 1920:
-        im.paste(spr, (pos, yo), spr)
-        pos += sprw+gap
-
-    im.show()
+    ty.weave(0,1920).show()
         
 
 if __name__ == '__main__':
