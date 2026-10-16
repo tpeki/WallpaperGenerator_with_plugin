@@ -123,7 +123,7 @@ INT_PATTERNS = {
 # -----
 INT_SETNAME = '*Sunflower*'
 INT_SPRITES = {
-    'pat1': [
+    'sun': [
         [0x10, 0x10],
         [0x180, '#FF0808'],
         [0x6186, '#FF0808'],
@@ -135,7 +135,7 @@ INT_SPRITES = {
         [0xdbdb, '#FF0808'],
         [None, 'turnover'],
         ],
-    'pat2': [
+    'sunflower': [
         [0x10, 0x10],
         [0, '#000000'],
         [0x80, '#FFF208'],
