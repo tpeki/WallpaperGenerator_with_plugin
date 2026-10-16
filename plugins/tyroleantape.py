@@ -755,22 +755,24 @@ def collect_parts(number):
         return None
         
     print('--- tyrolean created ---')
-    spslist = sps.sprfile_list(PRFX+DATA_DIR, ZIPFILE)  # PRFX+は後で削除
     taplist = tapfile_list(PRFX+DATA_DIR, TAPZIP)       # PRFX+は後で削除
-    spsel = [sg.Text('Sprite set:', width=10),
-             sg.Combo(values=spslist, key='-spsl-', readonly=True),
-             sg.Combo(values=[], key='-sprl-', readonly=True),
-             sg.Button('Add', key='-spadd-', background_color='#ddddff'),
-             ]
     tpsel = [sg.Text('Tape set:', width=10),
              sg.Combo(values=taplist, key='-tpsl-', readonly=True),
              sg.Combo(values=[], key='-tapl-', readonly=True),
              sg.Button('Select', key='-tapch-', background_color='#ffbbdd'),
              ]
 
+    spslist = sps.sprfile_list(PRFX+DATA_DIR, ZIPFILE)  # PRFX+は後で削除
+    spsel = [sg.Text('Sprite set:', width=10),
+             sg.Combo(values=spslist, key='-spsl-', readonly=True),
+             sg.Combo(values=[], key='-sprl-', readonly=True),
+             sg.Button('Add', key='-spadd-', background_color='#ddddff'),
+             ]
+
     tyimg = tapethumb(cur_ty)
     preview = sg.Image(data=tyimg, key='-preview-', size=TY_THUMB,
                        resize_type=sg.utils.ImageResizeType.FIT_WIDTH)
+    pals = palparts(cur_ty.palette)
     
     
 
@@ -780,7 +782,17 @@ def collect_parts(number):
 
 
     
-
+def palparts(palette):
+    pals = [sg.Text('Palette', width=7),
+            sg.Text(' 0', width=2, text_align='right'),
+            ]
+    for n,c in enumerate(palette):
+        cstr = rgb_string(c)
+        pals.append(sg.Button(' ', width=1, background_color=cstr,
+                              key=f'-pal{n}-'))
+    pals.append(sg.Text('9', width=1, text_align='left'))
+    return pals
+        
 
 def tapethumb(ty: Tylorean):
     w0,h0 = TY_THUMB
