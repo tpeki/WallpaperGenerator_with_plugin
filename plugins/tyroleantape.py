@@ -52,9 +52,9 @@ Palette = [(0x99, 0xdd, 0xdd), (0xec, 0xec, 0xec), (0xdd, 0x99, 0xdd),
 # -----
 INT_TAPESET = '*internal*'
 INT_PATTERNS = {
-    'simple': [[(0,3), (1,2), (0,10), (1,2), (0,3)]
-               ],  # 20px
-    'flat': [[(2,18)],
+    'simple': [[(0,3), (1,3), (0,12), (1,3), (0,3)]
+               ],  # 24px
+    'flat': [[(2,20)],
              ],
     'wavy': [[(0,18)],
              [(0,17),(10,1)],
@@ -113,9 +113,9 @@ INT_PATTERNS = {
                [(0,1),(5,9),(9,6),(0,2)],
                [(0,2),(5,7),(9,7),(0,2)],
                ],  # 18px
-    'rainbow': [[(9,2), (5,2), (9,1), (7,2), (9,1), (4,2), (9,1),(3,2),
-                 (9,1), (6,2), (9,2)]
-                ],  # 18px
+    'rainbow': [[(9,3), (5,3), (9,2), (7,3), (9,2), (4,3), (9,2),(3,3),
+                 (9,2), (6,3), (9,3)]
+                ],  # 29px
     'tiger': [[(4,16)],[(4,14),(9,2)],[(4,12),(9,4)],[(4,10),(9,6)],
               [(4,8),(9,8)],[(4,6),(9,10)],[(4,4),(9,12)],[(4,2),(9,14)],
               [(9,16)],[(9,14),(4,2)],[(9,12),(4,4)],[(9,10),(4,6)],
@@ -424,8 +424,11 @@ class Tyrolean:
             palette = Palette
         self.pattern = copy.deepcopy(pattern)  # 2次元配列なので引数はlocalに
         self.palette = copy.deepcopy(palette)
-        self.sprites = []
+        self.sprites = []  # sprite名のリスト[(sl, sr), ... ]
+        self.sprdic = {}  # spritesの登場スプライトパターン '{sl}&{sr}': [[sprtext]]
+        self.imglist = []
         self.spr_h = 0
+        self.height = 0
         self.outline = tyrolean_preserv['basic']['outline']
         self.margin = tyrolean_preserv['basic']['margin']
         self.spacing = tyrolean_preserv['basic']['spacing']
@@ -447,32 +450,36 @@ class Tyrolean:
             spr_w = int(w * (self.spr_h / h))
             sprite_image = sprite_image.resize((spr_w, self.spr_h),
                                                resample=Image.LANCZOS)
-        self.sprites.append(sprite_image)
+        self.imglist.append(sprite_image)
         
-        return len(self.sprites)-1
+        return len(self.imglist)-1
 
     def sprite_height(self, limit=0):
         """limit=0:最大sprite高 n:制限高"""
         if len(self.sprites) == 0:
             return 0
         if limit == 0:
-            return max([x.height for x in self.sprites])
+            print(f'sprightheight: lensprites={len(self.sprites)},')
+            self.imglist = self.render_sprites()
+            print(f'  lenimglist={len(self.imglist)}, {self.imglist}')
+            return max([x.height for x in self.imglist])
         else:
             self.spr_h = limit
             return limit
 
-
-    def size(self, label):
+    def pattern_size(self):
         return check_pat_size(self.pattern)
     
-    def weave(self, height, length):
-        """height=0: sprite_height based, n:limitted_height
+    def weave(self, length, height=None):
+        """height=0:sprite_height based, n:limitted_height, None:default
             length: > 0"""
         #margin = self.margin
         #spacing = self.spacing
         #twopt = self.twopt
+        if height is None:
+            height = self.height
 
-        if len(self.sprites) == 0:  # spriteなし
+        if len(self.imglist) == 0:  # spriteなし
             if height != 0:
                 th = check_pat_size(self.pattern) + margin*2
                 sr = height / th
@@ -494,19 +501,19 @@ class Tyrolean:
         
         spr_img = []
         swidth = 0
-        for x in self.sprites:
+        for x in self.imglist:
             if x.height > lheight:
                 w = int(x.width * (lheight/x.height))
                 x.resize((w, lheight), resample=Image.LANCZOS)
             swidth += x.width
             spr_img.append(x)
 
-        swidth += len(self.sprites)*self.spacing
+        swidth += len(self.imglist)*self.spacing
         tape_height = lheight + self.margin*2
         simage = Image.new('RGBA', (swidth, tape_height), (0,0,0,0))
 
         pos = 0
-        for x in self.sprites:
+        for x in self.imglist:
             y = (tape_height - x.height)//2
             simage.paste(x, (pos, y), x)
             pos += x.width + self.spacing
@@ -538,6 +545,32 @@ class Tyrolean:
         self.image = tape_img
         return tape_img
 
+    def render_sprites(self):
+        ss = sps.SpriteSet()
+        ss.merge_pdic(self.sprdic)
+        
+        ol = self.outline
+        otf = ol is not None
+
+        print(self.sprites)
+        
+        if otf:
+            imglist = [ss.image_with_border(rplemp(sl)+'&'+rplemp(sr), ol)\
+                       for sl,sr in self.sprites]
+        else:
+            imglist = [ss.image(rplemp(sl)+'&'+rplemp(sr), ol)\
+                       for sl,sr in self.sprites]
+
+        self.imglist = imglist
+        return imglist
+
+    def merge_sprdic(self, setname, sdic):
+        for x in sdic:
+            name = rplemp(setname)+'&'+rplemp(x)
+            pattern = sdic[x]
+            self.sprdic[name] = pattern
+        return len(sdic)
+
 
 def safe_int(s):
     try:
@@ -546,15 +579,20 @@ def safe_int(s):
         r = 0
     return r
 
+def rplemp(s):
+    if not isinstance(s, str):
+        return ''
+    return s.replace('&','%26')
+
 def load_tape_patterns(file_name, directory=None, add_zip=None):
-    file_name = fdi.sanitize_filename(file_name, ext=TAPEXT)
+    file_name = fdi.sanitize_filename(PRFX+file_name, ext=TAPEXT)
     path, base = pa.split(file_name)
     if directory is None or directory == '':
         directory = DATA_DIR
 
     source = fdi.read_filez(file_name, add_zip=add_zip)
     if source is None and path == '':
-        source = fdi.read_filez(directory+pa.sep+file, add_zip=zfile)
+        source = fdi.read_filez(directory+pa.sep+file_name, add_zip=add_zip)
         if source is None:
             return {}, ''
 
@@ -611,7 +649,7 @@ def str_to_tapecolumn(line):
     return data
         
 def save_tape_patterns(patterns, file_name, directory=None, desc=None):
-    file_name = fdi.sanitize_filename(file_name, ext=TAPEXT)
+    file_name = fdi.sanitize_filename(PRFX+file_name, ext=TAPEXT)
     set_name = pa.splitext(pa.basename(file_name))[0]
     if desc is None or desc == '':
         desc = set_name
@@ -639,7 +677,7 @@ def tapecolumn_to_str(line):
 
 def tapfile_list(directory, zfile):
     """テープセットファイルの取得"""
-    patn = directory+pa.sep+'*'+TAPEXT
+    patn = PRFX+directory+pa.sep+'*'+TAPEXT
     files = [fn.replace(TAPEXT,'') \
              for fn in fdi.glob_filelistz(patn, add_zip=zfile)]
     # files.append(INT_SETNAME)  # internalは呼び出し元で追加する
@@ -764,6 +802,15 @@ def collect_parts(number):
     tapname = tyrolean_preserv['tape_name']
     bdr = tyrolean_preserv['basic']['margin']
 
+    tpcache = {}
+    tapset = set_inttap()
+    tpcache[INT_TAPESET] = tapset
+    spcache = {}
+    spset = set_intspr()
+    spcache[INT_SETNAME] = spset
+    collected = sps.SpriteSet()
+    spr_arrange = []
+
     if number < tt:
         cur_ty = tyrolean_preserv['tplist'][number]
     elif number == tt:
@@ -776,32 +823,6 @@ def collect_parts(number):
         return None
         
     print('--- tyrolean created ---')
-    
-    taplist = tapfile_list(PRFX+DATA_DIR, TAPZIP)       # PRFX+は後で削除
-    taplist.append(INT_TAPESET)
-    patlist = list(INT_PATTERNS.keys())
-    tpsel = [sg.Text('Tape set:', width=10),
-             sg.Combo(values=taplist, key='-tpsl-', readonly=True,
-                      width=10, default_value=INT_TAPESET),
-             sg.Combo(values=patlist, key='-tapl-', readonly=True,
-                      width=16, default_value=''),
-             sg.Button('Select', key='-tsel-', background_color='#ffbbdd'),
-             ]
-
-    spslist = sps.sprfile_list(PRFX+DATA_DIR, ZIPFILE)  # PRFX+は後で削除
-    spslist.append(INT_SETNAME)
-    sprlist = list(INT_SPRITES.keys())
-    spsel = [sg.Text('Sprite set:', width=10),
-             sg.Combo(values=spslist, key='-spsl-', readonly=True,
-                      width=10, default_value=INT_SETNAME),
-             sg.Combo(values=sprlist, key='-sprl-', readonly=True,
-                      width=16, default_value=''),
-             sg.Button('Add', key='-spadd-', width=5,
-                       background_color='#ddddaa'),
-             sg.Button('Remove', key='-spadd-', width=5,
-                       background_color='#eeddaa'),
-             ]
-
     tyimg = tapethumb(cur_ty)
     top = [sg.Text(f'Tape No. {number}'),
            sg.Text(expand_x=True),
@@ -809,33 +830,86 @@ def collect_parts(number):
                     resize_type=sg.utils.ImageResizeType.FIT_WIDTH),
            ]
     
-    pals = palparts(cur_ty.palette)
+    taplist = tapfile_list(PRFX+DATA_DIR, TAPZIP)       # PRFX+は後で削除
+    taplist.append(INT_TAPESET)
+    patlist = list(INT_PATTERNS.keys())
+    tpsel = [sg.Text('Tape set:', width=10),
+             sg.Combo(values=taplist, key='-tpsl-', readonly=True,
+                      width=10, default_value=INT_TAPESET,
+                      enable_events=True),
+             sg.Combo(values=patlist, key='-tapl-', readonly=True,
+                      width=16, default_value=''),
+             sg.Button('Select', key='-tsel-', background_color='#ffbbdd'),
+             ]
+
+    palette = cur_ty.palette
+    pals = palparts(palette)
+    pals.extend([sg.Text(expand_x=True),
+                 sg.Button('P-Load', key='-pld-', background_color='#ddddff'),
+                 sg.Button('P-Save', key='-psv-', background_color='#ddddff'),
+                 ])
+    
+    spslist = sps.sprfile_list(PRFX+DATA_DIR, ZIPFILE)  # PRFX+は後で削除
+    spslist.append(INT_SETNAME)
+    sprlist = list(INT_SPRITES.keys())
+    spsel = [sg.Text('Sprite set:', width=10),
+             sg.Combo(values=spslist, key='-spsl-', readonly=True,
+                      width=10, default_value=INT_SETNAME,
+                      enable_events=True),
+             sg.Combo(values=sprlist, key='-sprl-', readonly=True,
+                      width=16, default_value=''),
+             sg.Button('Add', key='-spadd-', width=5,
+                       background_color='#ddddaa'),
+             sg.Button('Remove', key='-sprmv-', width=5,
+                       background_color='#eeddaa'),
+             ]
+
     ssprvw = [sg.Image(size=(500,60), key='-ssprvw-',
                        background_color='#d8d8d8')]
 
-    cparam = [[sg.Text('Margin', width=7),
-               sg.Input(width=4, key='-cbdr-', background_color='#ffffdd'),
-               sg.Text('Spacing', width=7),
-               sg.Input(width=4, key='-cspc-', background_color='#ffffdd')],
+    margin = cur_ty.margin
+    spacing = cur_ty.spacing
+    cparam = [sg.Text('Margin', width=7),
+              sg.Input(width=4, key='-cbdr-', default_text=margin,
+                       background_color='#ffffdd'),
+              sg.Text('Spacing', width=7),
+              sg.Input(width=4, key='-cspc-', default_text=spacing,
+                       background_color='#ffffdd'),
               ]
-
-    fgc, bgc = bg_and_font(cur_ty.outline)
-    coutl = [sg.Checkbox('Outline', default=(cur_ty.outline is not None),
-                         width=8, key='-foutl-'),
+    
+    _,th = cur_ty.pattern_size()
+    sh = cur_ty.sprite_height()
+    theight = cur_ty.height
+    heights = [sg.Text('Height', width=7),
+               sg.Input(width=4, key='-thgt-', default_text=theight,
+                        background_color='#ffffdd'),
+               sg.Text(f' Tape {th}/Sprite {sh}', key='-aheights-'),
+               ]
+    
+    if cur_ty.outline is None:
+        otf = False
+        outline = '#d8d8d8'
+    else:
+        otf = True
+        outline = cur_ty.outline
+    fgc, bgc = bg_and_font(outline)
+    coutl = [sg.Checkbox('Outline', default=otf, width=8, key='-foutl-'),
              sg.Button(bgc[1:], text_color=fgc, background_color=bgc,
                        key='-coutl-')]
 
-    blur = cur_ty.twopt != Image.NEAREST  # NEAREST or LANCZOS
-    flags = [sg.Checkbox('Flip', default=(cur_ty.flip & 1),
+    flip = cur_ty.flip
+    twopt = cur_ty.twopt
+    blur = twopt != Image.NEAREST  # NEAREST or LANCZOS
+    flags = [sg.Checkbox('Flip', default=(flip & 1),
                          width=6, key='-fflip-'),
-             sg.Checkbox('Mirror', default=(cur_ty.flip & 2),
+             sg.Checkbox('Mirror', default=(flip & 2),
                          width=6, key='-fmirr-'),
              sg.Checkbox('Blur', default=blur,
                          width=6, key='-fsmpl-'),
              ]
 
-    buttons = [sg.Button('Load', key='-tyld-'),
-               sg.Button('Save', key='-tysv-'),
+    buttons = [sg.Button('SetLoad', key='-tyld-', background_color='#ddddff'),
+               sg.Button('SetSave', key='-tysv-', background_color='#ddddff'),
                sg.Text(expand_x=True),
                sg.Button('Cancel', key='-can-', width=6,
                          background_color='#ffdddd'),
@@ -848,7 +922,8 @@ def collect_parts(number):
               pals,
               spsel,
               ssprvw,
-              [sg.Column(cparam, expand_x=True, expand_y=True),
+              [sg.Column([cparam, heights],
+                         expand_x=True, expand_y=True),
                sg.Text(' '),
                sg.Column([coutl,flags], expand_x=True),
                #sg.Text(' '),
@@ -856,17 +931,95 @@ def collect_parts(number):
                ],
               buttons]
 
+    dup = copy.deepcopy(cur_ty)  # キャンセル用
     wn = sg.Window(f'Tape No.{number}', layout)
 
     while True:
         ev,va = wn.read()
 
         if ev in ('-can-', sg.WINDOW_CLOSED):
+            ev = '-can-'
             break
+        elif ev == '-ok-':
+            break
+        elif ev.startswith('-pal'):
+            n = int(ev[4])
+            cl = sg.popup_color(ev,rgb_string(cur_ty.palette[n]),
+                                format='tuple')
+            if cl is not None:
+                cur_ty.palette[n] = cl
+                fgc, bgc = bg_and_font(cl)
+                wn[f'-pal{n}-'].update(background_color=bgc)
+        elif ev == '-psv-':
+            # save functions doesn't need refresh preview
+            continue
+        elif ev == '-tysv-':
+            # save functions doesn't need refresh preview
+            continue
+        elif ev == '-tpsl-':
+            v = wn['-tpsl-'].get()
+            if v in tpcache:
+                tps = tpcache[v]
+            else:
+                tps = Tapes()
+                tps.load_file(v, PRFX+DATA_DIR, TAPZIP)
+                tpcache[v] = tps
 
+            patlist = tps.list()
+            wn['-tapl-'].update(values=patlist)
+            continue
+        elif ev == '-spsl-':
+            v = wn['-spsl-'].get()
+            print(v, spcache)
+            if v in spcache:
+                spset = spcache[v]
+            else:
+                spset = sps.SpriteSet()
+                spset.load_file(v, PRFX+DATA_DIR, ZIPFILE)
+                spcache[v] = spset
+            sprlist = spset.list()
+            wn['-sprl-'].update(values=sprlist)
+            continue
+        elif ev == '-tsel-':
+            
+            continue
+        elif ev in ('-spadd-', '-sprmv-'):
+            if ev == '-sprmv-':
+                if len(spr_arrange) == 0:
+                    continue
+                spr_arrange.pop()
+            else:
+                spset = wn['-spsl-'].get()
+                sprname = wn['-sprl-'].get()
+                if sprname in spcache[spset].list():
+                    spr_arrange.append([spset,sprname])
+                    collected.update_sprite(spset+sprname,
+                                            spcache[spset].get(sprname))
+                else:
+                    continue
+
+            ssprvw, imlist = sprthumb(cur_ty, spr_arrange, collected)
+            cur_ty.sprites = imlist
+            wn['-ssprvw-'].update(data=ssprvw)
+        elif ev == '-coutl-':
+            cl = sg.popup_color(ev,rgb_string(cur_ty.outline),
+                                format='tuple')
+            if cl is not None:
+                cur_ty.outline = cl
+                fgc, bgc = bg_and_font(cl)
+                wn[f'-coutl-'].update(text=bgc[1:], background_color=bgc)
+
+        
+
+        tyimg = tapethumb(cur_ty)
+        wn['-preview-'].update(data=tyimg)
         print(ev, va)
 
     wn.close()
+    if ev == '-can-':
+        cur_ty = dup
+        return None
+    
 
                
                
@@ -881,6 +1034,10 @@ def palparts(palette):
     pals = [sg.Text('Palette', width=7),
             sg.Text(' 0', width=2, text_align='right'),
             ]
+
+    if len(palette) < 10:
+        palette.extend([[(0,0,0)]*10])
+        palette = palette[:10]
     for n,c in enumerate(palette):
         cstr = rgb_string(c)
         pals.append(sg.Button(' ', width=1, background_color=cstr,
@@ -892,35 +1049,79 @@ def palparts(palette):
 def tapethumb(ty: Tyrolean):
     w0,h0 = TY_THUMB
 
-    if ty.image is None:
-        tyimg = ty.weave(0, w0)
-    else:
-        tyimg = ty.image
-
+    tyimg = ty.weave(w0, 0)
+    
     w,h = tyimg.size
     if h > h0:
-        tyimg = tyimg.thumbnail((int(w*h0/h), h0))  # 幅広なら縮小
+        tyimg.thumbnail((int(w*h0/h), h0))  # 幅広なら縮小
         h = h0
     if tyimg.width > w0:
         w = w0
 
     if w < tyimg.width or h < tyimg.height:
         tyimg = tyimg.crop((w,h))
-    #tyimg = tyimg.resize((w*2,h*2), resample=Image.LANCZOS)
-    
+
     return tyimg
+
     
+def sprthumb(ty: Tyrolean, sprites_list, ss: sps.SpriteSet):
+    w0,h0 = 500,60
+    bg = '#d8d8d8'
+
+    sp = ty.spacing
+    ol = ty.outline
+    otf = ol is not None
+    
+    if len(sprites_list) == 0:
+        return Image.new('RGB', (500,60), bg)
+
+    #＝＝＝＝＝＝＝＝＝＝＝ デバッグ中 ＝＝＝＝＝＝＝＝＝＝＝＝＝
+    #    File "D:\usr\pekidocs\python\wallpaper
+    #    generator\plugins\tyroleantape.py", line 1039, in sprthumb
+    #        maxheight = max([ss.size(x)[1] for x in ss.list()])
+    #    ValueError: max() arg is an empty sequence
+    #
+    #    多分、remove時にcollected.spritesの削除をしすぎてる
+    #＝＝＝＝＝＝＝＝＝＝＝ デバッグ中 ＝＝＝＝＝＝＝＝＝＝＝＝＝
+    
+    maxheight = max([ss.size(x)[1] for x in ss.list()])
+    sph = maxheight if ty.height == 0 else ty.height - margin*2
+
+    if otf:
+        imlist = [ss.image_with_border(sl+sr, ol) for sl,sr in sprites_list]
+    else:
+        imlist = [ss.image(sl+sr, ol) for sl,sr in sprites_list]
+    
+    ww = 0
+    for x in imlist:
+        if not isinstance(x, Image.Image):
+            continue
+        w,h = x.size
+        w = int(w*60/h)
+        ww += w+sp
+
+    base = Image.new('RGB', (ww, 60), bg)
+    
+    ww = 0
+    for x in imlist:
+        if not isinstance(x, Image.Image):
+            continue
+
+        w,h = x.size
+        w = int(w*60/h)
+        im = x.resize((w,60), resample=Image.NEAREST)
+        base.paste(im, (ww,0), im)
+        ww += w+sp
+
+    return base, imlist
 
 
 
 
 
-
-
-
-
-
-
+#-----------------------------------------------------------------------
+#-----------------------------------------------------------------------
+#-----------------------------------------------------------------------
 #-----------------------------------------------------------------------
 # -----
 # 表示スプライトの選択
@@ -1482,18 +1683,22 @@ def chk(tape_name=None, fringe=3, gap=3, spr_set=None, spr_name=None):
         print(s.list())
     if spr_name is None:
         spr_name = s.list()
+    spr_set = s.name
 
     ty = Tyrolean(tapes.get(tape_name), Palette)
+    ty.merge_sprdic(spr_set, s.sprites)
 
     border = tyrolean_preserv['basic']['outline']
-    for spr in spr_name:
-        simg = s.image_with_border(spr, border_color=border)
-        ty.put_sprite(simg)
-
-    ty.margin = fringe
+    ty.outline = border
     ty.spacing = gap
+    ty.margin = fringe
 
-    ty.weave(0,1920).show()
+    for spr in spr_name:
+        ty.sprites.append((spr_set,spr))
+
+    ty.render_sprites()
+
+    ty.weave(1920, 0).show()
         
 
 if __name__ == '__main__':
