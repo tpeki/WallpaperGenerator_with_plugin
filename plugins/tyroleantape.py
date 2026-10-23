@@ -19,12 +19,14 @@ OLCOLOR = (0, 0, 0x11)   # spriteアウトライン色初期値
 FGJITTER = 30  # テープ色ゆらぎ Palette +/- FGJitter, 
 BGJITTER = 50  # 背景色ゆらぎ  Gradation(BG1 +/- BGJitter,BG2 +/- BGJitter)
 # 単位面積 = テープ幅×(利用spr幅+spr間隔)+利用spr数
-ZOOM = 4  # multiplier テープ幅倍率 
-SPACING = 4  # spr間隔(pix)
+ZOOM = 4  # multiplier テープ幅倍率
+INTERVAL = 0  # テープ間隔
 ANGLE = 0  # 全体角度 degree
 # sprite配置しない場合は無視
 
 # --- 内部定数設定 ---
+BGANGLE = 0
+SPACING = 4  # spr間隔(pix)
 MARGIN = 5  # スプライトの両側に設ける余白：テープ幅=sprite最大高＋border(pix)
 FLIP = 0  # sprite配置時、反転spriteを続けて配置する bit1:up/down bit2:left/right
 
@@ -35,6 +37,10 @@ PALETTE_SIZE = 10
 TAPZIP = 'Tyrolean.zip'
 TAPEXT = '.tap'
 TY_THUMB = (300,60)
+TEXTURE_WEIGHTS = [[0,0,0,0],  # 断面,サテン,織目,ムラ(長手方向)
+                   [0.5, 0.2, 0.3, 1],
+                   [0.6, 0.7, 0.5, 1]
+                   ]
 
 if __name__ == '__main__':
     PRFX = '../'
@@ -230,8 +236,9 @@ tyrolean_preserv = {'palette': Palette.copy(),
                     'basic': {'bg1': BGCOLOR1, 'bg2': BGCOLOR2,
                               'outline': OLCOLOR,
                               'fjitter': FGJITTER, 'bjitter': BGJITTER,
-                              'zoom': ZOOM, 'spacing': SPACING,
-                              'angle': ANGLE, 'margin': MARGIN,
+                              'zoom': ZOOM, 'interval': INTERVAL,
+                              'angle': ANGLE, 'bgangle': BGANGLE,
+                              'spacing': SPACING, 'margin': MARGIN,
                               'flip': FLIP, 'twopt': Image.NEAREST, # Image.LANCZOS
                               },
                     'sps': None,
@@ -241,6 +248,9 @@ tyrolean_preserv = {'palette': Palette.copy(),
                     }
 
 
+# -----
+# テープセット
+# -----
 class Tapes:
     def __init__(self):
         self.patterns = {}
@@ -417,7 +427,9 @@ class Tapes:
         r = save_tape_patterns(self.patterns, file_name, directory, self.desc)
         return r  # num of saved patterns
 
-
+# -----
+# テープ構成
+# -----
 class Tyrolean:
     def __init__(self, pattern, palette=None):
         if palette is None:
@@ -434,6 +446,7 @@ class Tyrolean:
         self.spacing = tyrolean_preserv['basic']['spacing']
         self.flip = tyrolean_preserv['basic']['flip']
         self.twopt = tyrolean_preserv['basic']['twopt']
+        self.texture = 1
         
         tw = 0
         for col in self.pattern:
@@ -441,28 +454,16 @@ class Tyrolean:
             tw = max(tw, cw)
         self.p_height = tw  # パターンの最大幅
         self.p_width = len(self.pattern)  # テープの最小繰り返し幅
-        self.image = None  # image()で後から生成
+        # self.image = None  # image()で後から生成
         
-
-    def put_sprite(self, sprite_image, shrink=False):
-        w,h = sprite_image.size
-        if self.spr_h < h and shrink:
-            spr_w = int(w * (self.spr_h / h))
-            sprite_image = sprite_image.resize((spr_w, self.spr_h),
-                                               resample=Image.LANCZOS)
-        self.imglist.append(sprite_image)
-        
-        return len(self.imglist)-1
-
     def sprite_height(self, limit=0):
         """limit=0:最大sprite高 n:制限高"""
         if len(self.sprites) == 0:
             return 0
         if limit == 0:
-            print(f'sprightheight: lensprites={len(self.sprites)},')
             self.imglist = self.render_sprites()
-            print(f'  lenimglist={len(self.imglist)}, {self.imglist}')
-            return max([x.height for x in self.imglist])
+            maxheight = max([x.height for x in self.imglist])
+            return maxheight
         else:
             self.spr_h = limit
             return limit
@@ -481,7 +482,7 @@ class Tyrolean:
 
         if len(self.imglist) == 0:  # spriteなし
             if height != 0:
-                th = check_pat_size(self.pattern) + margin*2
+                th = check_pat_size(self.pattern) + self.margin*2
                 sr = height / th
                 tape_img = tape_image(self.pattern, self.palette,
                                       int(length/sr))
@@ -491,21 +492,18 @@ class Tyrolean:
                 tape_img = tape_image(self.pattern, self.palette, length)
             return tape_img
 
-        
         lheight = self.spr_h
         if lheight == 0:
             lheight = self.sprite_height(0)
+        if height > self.margin*2:
+            lheight = height - self.margin*2
 
-        if height > 0:
-            lheight = height
-        
         spr_img = []
         swidth = 0
         for x in self.imglist:
-            if x.height > lheight:
-                w = int(x.width * (lheight/x.height))
-                x.resize((w, lheight), resample=Image.LANCZOS)
-            swidth += x.width
+            w = int(x.width * (lheight/x.height))
+            x = x.resize((w, lheight), resample=Image.LANCZOS)
+            swidth += w
             spr_img.append(x)
 
         swidth += len(self.imglist)*self.spacing
@@ -513,7 +511,7 @@ class Tyrolean:
         simage = Image.new('RGBA', (swidth, tape_height), (0,0,0,0))
 
         pos = 0
-        for x in self.imglist:
+        for x in spr_img:
             y = (tape_height - x.height)//2
             simage.paste(x, (pos, y), x)
             pos += x.width + self.spacing
@@ -527,9 +525,7 @@ class Tyrolean:
 
         tape_img = tape_image(self.pattern, self.palette, int(length/sr))
         tape_img = tape_img.resize((length, tape_height), self.twopt)
-        #tape_img.show()
-
-        print((length, tape_height))
+        #print((length, tape_height))
         
         pos = 0
         while True:
@@ -541,7 +537,9 @@ class Tyrolean:
             if self.flip != 0:
                 tape_img.paste(fimage, (pos, 0), fimage)
                 pos += swidth
-            
+
+        if 0 < self.texture < 3:
+            tape_img = add_texture(tape_img, TEXTURE_WEIGHTS[self.texture])
         self.image = tape_img
         return tape_img
 
@@ -551,24 +549,20 @@ class Tyrolean:
         
         ol = self.outline
         otf = ol is not None
-
-        print(self.sprites)
+        #print(self.sprites)
         
         if otf:
-            imglist = [ss.image_with_border(rplemp(sl)+'&'+rplemp(sr), ol)\
+            imglist = [ss.image_with_border(ssname(sl,sr), ol)\
                        for sl,sr in self.sprites]
         else:
-            imglist = [ss.image(rplemp(sl)+'&'+rplemp(sr), ol)\
-                       for sl,sr in self.sprites]
+            imglist = [ss.image(ssname(sl,sr)) for sl,sr in self.sprites]
 
         self.imglist = imglist
         return imglist
 
     def merge_sprdic(self, setname, sdic):
         for x in sdic:
-            name = rplemp(setname)+'&'+rplemp(x)
-            pattern = sdic[x]
-            self.sprdic[name] = pattern
+            self.sprdic[ssname(setname,x)] = sdic[x]
         return len(sdic)
 
 
@@ -579,10 +573,13 @@ def safe_int(s):
         r = 0
     return r
 
-def rplemp(s):
-    if not isinstance(s, str):
-        return ''
-    return s.replace('&','%26')
+def ssname(s1,s2):
+    def rplemp(s):
+        if not isinstance(s, str):
+            return ''
+        return s.replace('&','%26')
+    
+    return rplemp(s1)+'&'+rplemp(s2)
 
 def load_tape_patterns(file_name, directory=None, add_zip=None):
     file_name = fdi.sanitize_filename(PRFX+file_name, ext=TAPEXT)
@@ -690,7 +687,7 @@ def intro(modlist: Modules, module_name):
                        {'color1':'背景色1', 'color2':'背景色2',
                         'color3':'縁取り色',
                         'color_jitter':'前景揺らぎ', 'sub_jitter':'背景揺らぎ',
-                        'pwidth':'ズーム率', 'pheight':'キャラ間隔',
+                        'pwidth':'ズーム率', 'pheight':'テープ間隔',
                         'pdepth':'角度'})
     return module_name
 
@@ -703,23 +700,36 @@ def default_param(p: Param):
     p.color_jitter = FGJITTER
     p.sub_jitter = BGJITTER
     p.pwidth = ZOOM
-    p.pheight = SPACING
+    p.pheight = INTERVAL
     p.pdepth = ANGLE
     return p
 
 
 def set_preserv(p):
-    bdic = Tyrolean_preserv['basic']
+    bdic = tyrolean_preserv['basic']
     bdic['bg1'] = p.color1.ctoi()
     bdic['bg2'] = p.color2.ctoi()
     bdic['outline'] = p.color3.ctoi()
     bdic['fjitter'] = p.color_jitter
     bdic['bjitter'] = p.sub_jitter
     bdic['zoom'] = p.pwidth
-    bdic['spacing'] = p.pheight
+    bdic['interval'] = p.pheight
     bdic['angle'] = p.pdepth
 
+def revert_p(p):
+    bdic = tyrolean_preserv['basic']
+    p.color1 = RGBColor(bdic['bg1'])
+    p.color2 = RGBColor(bdic['bg2'])
+    p.color3 = RGBColor(bdic['outline'])
+    p.color_jitter = bdic['fjitter'] 
+    p.sub_jitter = bdic['bjitter']
+    p.pwidth = bdic['zoom'] 
+    p.pheight = bdic['interval'] 
+    p.pdepth = bdic['angle']
 
+
+
+    
 # 基本スプライトの設定
 def set_intspr(): # -> sps.SpriteSet
     s = sps.SpriteSet()
@@ -739,15 +749,11 @@ def set_inttap():
 def check_pat_size(pattern):
     """patternの周期長、テープ幅を取得 -> (W, H)"""
     h = []
-    #try:
     for x in pattern:
         linemax = sum([j for i,j in x])
         h.append(linemax)
-        #print(linemax, x)
         
     return len(pattern), max(h)
-    #except ValueError:
-     #   return None
 
 
 def tape_image(pattern: list, palette: list, length: int) -> Image.Image:
@@ -782,8 +788,6 @@ def tape_image(pattern: list, palette: list, length: int) -> Image.Image:
     full_matrix = np.tile(unit_matrix, (1, repeats, 1))[:, :length, :]
     alpha = np.tile(unit_alpha, (1, repeats))[:, :length]
 
-    #h,w,_ = full_matrix.shape
-    #rgba = np.dstack([full_matrix, np.full((h, w), 255, np.uint8)])
     rgba = np.dstack([full_matrix, alpha])
    
     return Image.fromarray(rgba,'RGBA')
@@ -813,21 +817,31 @@ def collect_parts(number):
 
     if number < tt:
         cur_ty = tyrolean_preserv['tplist'][number]
+        spr_arrange = cur_ty.sprites.copy()
+        collected.sprites = cur_ty.sprdic.copy()
+        sprth, imglist = sprthumb(cur_ty, spr_arrange, collected)
+        cur_ty.imglist = imglist
     elif number == tt:
         if tapname is None:
             tapname = next(iter(tapset.list()))
         pat = tapset.get(tapname)
         cur_ty = Tyrolean(pat, Palette)
         tyrolean_preserv['tplist'].append(cur_ty)
+        sprth = Image.new('RGB',(500,60), '#d8d8d8')
     else:
         return None
         
     print('--- tyrolean created ---')
     tyimg = tapethumb(cur_ty)
+    tex = cur_ty.texture
     top = [sg.Text(f'Tape No. {number}'),
            sg.Text(expand_x=True),
            sg.Image(data=tyimg, key='-preview-', size=TY_THUMB,
                     resize_type=sg.utils.ImageResizeType.FIT_WIDTH),
+           sg.Text('Texture'),
+           sg.Slider(value_range=(0,2), default_value=tex, resolution=1,
+                     orientation='v', size=(1,5), disable_number_display=True,
+                     enable_changed_events=True, key='-ftex-'),
            ]
     
     taplist = tapfile_list(PRFX+DATA_DIR, TAPZIP)       # PRFX+は後で削除
@@ -864,7 +878,7 @@ def collect_parts(number):
                        background_color='#eeddaa'),
              ]
 
-    ssprvw = [sg.Image(size=(500,60), key='-ssprvw-',
+    ssprvw = [sg.Image(data=sprth, size=(500,60), key='-ssprvw-',
                        background_color='#d8d8d8')]
 
     margin = cur_ty.margin
@@ -879,16 +893,17 @@ def collect_parts(number):
     
     _,th = cur_ty.pattern_size()
     sh = cur_ty.sprite_height()
-    theight = cur_ty.height
+    fheight = cur_ty.height
     heights = [sg.Text('Height', width=7),
-               sg.Input(width=4, key='-thgt-', default_text=theight,
+               sg.Input(width=4, key='-fheight-', default_text=fheight,
                         background_color='#ffffdd'),
-               sg.Text(f' Tape {th}/Sprite {sh}', key='-aheights-'),
+               sg.Text(f' Tape {th}', key='-theights-'),
+               sg.Text(f'/Sprite {sh}', key='-sheights-'),
                ]
     
     if cur_ty.outline is None:
         otf = False
-        outline = '#d8d8d8'
+        outline = tyrolean_preserv['basic']['outline']
     else:
         otf = True
         outline = cur_ty.outline
@@ -911,6 +926,8 @@ def collect_parts(number):
     buttons = [sg.Button('SetLoad', key='-tyld-', background_color='#ddddff'),
                sg.Button('SetSave', key='-tysv-', background_color='#ddddff'),
                sg.Text(expand_x=True),
+               sg.Button('Test', key='-tst-', width=6,
+                         background_color='#ddeeff'),
                sg.Button('Cancel', key='-can-', width=6,
                          background_color='#ffdddd'),
                sg.Button('Done', key='-ok-', width=6,
@@ -946,10 +963,12 @@ def collect_parts(number):
             n = int(ev[4])
             cl = sg.popup_color(ev,rgb_string(cur_ty.palette[n]),
                                 format='tuple')
-            if cl is not None:
-                cur_ty.palette[n] = cl
-                fgc, bgc = bg_and_font(cl)
-                wn[f'-pal{n}-'].update(background_color=bgc)
+            fdi.flush_ev(wn)
+            if cl is None:
+                continue
+            cur_ty.palette[n] = cl
+            fgc, bgc = bg_and_font(cl)
+            wn[ev].update(background_color=bgc)
         elif ev == '-psv-':
             # save functions doesn't need refresh preview
             continue
@@ -957,7 +976,7 @@ def collect_parts(number):
             # save functions doesn't need refresh preview
             continue
         elif ev == '-tpsl-':
-            v = wn['-tpsl-'].get()
+            v = wn[ev].get()
             if v in tpcache:
                 tps = tpcache[v]
             else:
@@ -966,10 +985,10 @@ def collect_parts(number):
                 tpcache[v] = tps
 
             patlist = tps.list()
-            wn['-tapl-'].update(values=patlist)
+            wn['-tapl-'].update(values=patlist, value='')
             continue
         elif ev == '-spsl-':
-            v = wn['-spsl-'].get()
+            v = wn[ev].get()
             print(v, spcache)
             if v in spcache:
                 spset = spcache[v]
@@ -978,11 +997,16 @@ def collect_parts(number):
                 spset.load_file(v, PRFX+DATA_DIR, ZIPFILE)
                 spcache[v] = spset
             sprlist = spset.list()
-            wn['-sprl-'].update(values=sprlist)
+            wn['-sprl-'].update(values=sprlist, value='')
             continue
         elif ev == '-tsel-':
-            
-            continue
+            tpsname = wn['-tpsl-'].get()
+            tapname = wn['-tapl-'].get()
+            if not tapname in tpcache[tpsname].list():
+                continue
+            cur_ty.pattern = tpcache[tpsname].get(tapname)
+            _,h = cur_ty.pattern_size()
+            wn['-theights-'].update(f' Tape {h}')
         elif ev in ('-spadd-', '-sprmv-'):
             if ev == '-sprmv-':
                 if len(spr_arrange) == 0:
@@ -991,45 +1015,65 @@ def collect_parts(number):
             else:
                 spset = wn['-spsl-'].get()
                 sprname = wn['-sprl-'].get()
-                if sprname in spcache[spset].list():
-                    spr_arrange.append([spset,sprname])
-                    collected.update_sprite(spset+sprname,
-                                            spcache[spset].get(sprname))
-                else:
+                if not sprname in spcache[spset].list():
                     continue
-
+                spr_arrange.append([spset,sprname])
+                collected.update_sprite(ssname(spset,sprname),
+                                        spcache[spset].get(sprname))
+            sh = cur_ty.sprite_height()
+            wn['-sheights-'].update(f'/Sprite {sh}')
         elif ev == '-coutl-':
             cl = sg.popup_color(ev,rgb_string(cur_ty.outline),
                                 format='tuple')
-            if cl is not None:
-                cur_ty.outline = cl
-                fgc, bgc = bg_and_font(cl)
-                wn[f'-coutl-'].update(text=bgc[1:], background_color=bgc)
-                
+            if cl is None:
+                continue
+            cur_ty.outline = cl if cur_ty.outline is not None else None
+            fgc, bgc = bg_and_font(cl)
+            wn[ev].update(text=bgc[1:], background_color=bgc, text_color=fgc)
+            outline = cl
+        elif ev == '-foutl-':
+            otf = wn[ev].get()
+            if otf:
+                cur_ty.outline = outline
+            else:
+                cur_ty.outline = None
+        elif ev in ('-fflip-', '-fmirr-'):
+            ffl = 1 if wn['-fflip-'].get() else 0
+            fmi = 2 if wn['-fmirr-'].get() else 0
+            cur_ty.flip = ffl | fmi
+        elif ev == '-fsmpl-':
+            cur_ty.twopt = Image.LANCZOS if wn['-fsmpl-'].get() \
+                           else Image.NEAREST
+        elif ev == '-tst-':
+            fh = safe_int(wn['-fheight-'].get())
+            if fh > 0:
+                cur_ty.height = fh
+            spc = safe_int(wn['-cspc-'].get())
+            if spc > 0:
+                cur_ty.spacing = spc
+            mgn = safe_int(wn['-cbdr-'].get())
+            if mgn > 0:
+                cur_ty.margin = mgn
+        elif ev == '-ftex-':
+            v = safe_int(wn[ev].get())
+            cur_ty.texture = v
 
-        if ev in ('-spadd-', '-sprmv-', '-coutl-'):
-            ssprvw, imlist = sprthumb(cur_ty, spr_arrange, collected)
-            cur_ty.sprites = imlist
-            wn['-ssprvw-'].update(data=ssprvw)
-        
+        cur_ty.sprites = spr_arrange
+        cur_ty.sprdic = collected.sprites
+        sprth, imglist = sprthumb(cur_ty, spr_arrange, collected)
+        cur_ty.imglist = imglist
+        wn['-ssprvw-'].update(data=sprth)
 
         tyimg = tapethumb(cur_ty)
         wn['-preview-'].update(data=tyimg)
-        print(ev, va)
+        print(ev)
 
     wn.close()
     if ev == '-can-':
         cur_ty = dup
         return None
-    
 
-               
-               
-
-
-
-
-
+    return cur_ty
 
     
 def palparts(palette):
@@ -1063,36 +1107,34 @@ def tapethumb(ty: Tyrolean):
     if w < tyimg.width or h < tyimg.height:
         tyimg = tyimg.crop((w,h))
 
+    if 0 < ty.texture < 3:
+        tyimg = add_texture(tyimg, TEXTURE_WEIGHTS[ty.texture])
     return tyimg
 
     
 def sprthumb(ty: Tyrolean, sprites_list, ss: sps.SpriteSet):
     w0,h0 = 500,60
     bg = '#d8d8d8'
-
+    
     sp = ty.spacing
     ol = ty.outline
     otf = ol is not None
-    
+    if otf:
+        fgc, bgc = bg_and_font(ol)
+        if fgc == '#000000':
+            bg = '#383838'
+        
     if len(sprites_list) == 0:
         return Image.new('RGB', (500,60), bg), []
-
-    #＝＝＝＝＝＝＝＝＝＝＝ デバッグ中 ＝＝＝＝＝＝＝＝＝＝＝＝＝
-    #    File "D:\usr\pekidocs\python\wallpaper
-    #    generator\plugins\tyroleantape.py", line 1039, in sprthumb
-    #        maxheight = max([ss.size(x)[1] for x in ss.list()])
-    #    ValueError: max() arg is an empty sequence
-    #
-    #    多分、remove時にcollected.spritesの削除をしすぎてる
-    #＝＝＝＝＝＝＝＝＝＝＝ デバッグ中 ＝＝＝＝＝＝＝＝＝＝＝＝＝
     
     maxheight = max([ss.size(x)[1] for x in ss.list()])
-    sph = maxheight if ty.height == 0 else ty.height - margin*2
+    sph = maxheight if ty.height == 0 else ty.height - ty.margin*2
 
     if otf:
-        imlist = [ss.image_with_border(sl+sr, ol) for sl,sr in sprites_list]
+        imlist = [ss.image_with_border(ssname(sl,sr), ol) \
+                  for sl,sr in sprites_list]
     else:
-        imlist = [ss.image(sl+sr, ol) for sl,sr in sprites_list]
+        imlist = [ss.image(ssname(sl,sr)) for sl,sr in sprites_list]
     
     ww = 0
     for x in imlist:
@@ -1103,12 +1145,12 @@ def sprthumb(ty: Tyrolean, sprites_list, ss: sps.SpriteSet):
         ww += w+sp
 
     base = Image.new('RGB', (ww, 60), bg)
+
     
     ww = 0
     for x in imlist:
         if not isinstance(x, Image.Image):
             continue
-
         w,h = x.size
         w = int(w*60/h)
         im = x.resize((w,60), resample=Image.NEAREST)
@@ -1118,233 +1160,192 @@ def sprthumb(ty: Tyrolean, sprites_list, ss: sps.SpriteSet):
     return base, imlist
 
 
+def add_texture(image, weights=None):
+    """weight = [crossing, satin-hilight, fabric, longitude]
+    """
+    arr = np.asarray(image).astype(np.float32)
+    h, w = arr.shape[:2]
+
+    tex = ribbon_texture(w, h, weights)
+
+    arr[..., :3] *= tex[..., None]
+    arr = np.clip(arr, 0, 255).astype(np.uint8)
+    return Image.fromarray(arr)
 
 
+def ribbon_texture(width: int, height: int, weights: (list|None)=None
+                   )-> np.ndarray:
+    """リボン用テクスチャ生成 -> ndarray (height, width) 0～1.5程度の乗算係数
+    """
+    if not isinstance(weights, list):
+        weights = [0.5, 0.3, 0.2, 1.0]
+    weights.extend([0,]*4)
+    wc, wh, wf, wl = weights[:4]
+     
+    # 正規化座標
+    u = np.linspace(0.0, 1.0, width, dtype=np.float32)
+    v = np.linspace(-1.0, 1.0, height, dtype=np.float32)
+    U, V = np.meshgrid(u, v)
 
+    # 断面陰影
+    cross = (
+        0.95
+        + 0.05 * np.cos(V * np.pi / 2)
+    )
+    # サテン光沢
+    highlight = (
+        1.0
+        + 0.25 * np.exp(
+            -((V - 0.08*np.sin(U*4*np.pi))/0.12)**2)
+    )
+    # 織り目
+    fabric = (
+        1.0
+        + 0.015 * np.sin(U * 600 * np.pi)
+        + 0.008 * np.sin(U * 1200 * np.pi)
+    )
+    # 長手方向のムラ
+    longitudinal = (
+        0.97
+        + 0.03 * np.sin(U * 8 * np.pi)
+    )
+
+    tex = tex = np.ones((height, width), dtype=np.float32)
+
+    tex *= 1 + (cross - 1) * wc
+    tex *= 1 + (highlight - 1) * wh
+    tex *= 1 + (fabric - 1) * wf
+    tex *= 1 + (longitudinal - 1) * wl
+    return tex.astype(np.float32)
+
+
+def desc(p):
+    placer = ['Parallel', 'Random']
+    bg_grad = ['Vertical', 'Horizontal', 'Diagonal']
+    dup_b = copy.deepcopy(tyrolean_preserv['basic'])
+    dup_t = copy.deepcopy(tyrolean_preserv['tplist'])
+    set_preserv(p)
+    bdic = tyrolean_preserv['basic']
+
+    left = []
+    right = []
+    for x in range(5):
+        left.append([sg.Text(f'{x}'),
+                     sg.Image(key=f'-tap{x}-', background_color='#d8d8d8',
+                              size=TY_THUMB, resize_type='fit_width',
+                              enable_events=True),
+                     ])
+        right.append([sg.Text(f'{x+5}'),
+                     sg.Image(key=f'-tap{x+5}-', background_color='#d8d8d8',
+                              size=TY_THUMB, resize_type='fit_width',
+                              enable_events=True),
+                     ])
+    tapes = [sg.Frame('Tape Set', layout=[[sg.Column(layout=left),
+                                           sg.Column(layout=right)]])]
+    
+    layouting = [sg.Combo(placer, default_value=next(iter(placer)),
+                          width=10, key='-plcr-', readonly=True),
+                 sg.Text('  Zoom'),
+                 sg.Input(f'{bdic["zoom"]}', key='-zm-', width=4,
+                          background_color='#ffffdd'),
+                 sg.Text('Interval'),
+                 sg.Input(f'{bdic["interval"]}', key='-itvl-', width=4,
+                          background_color='#ffffdd'),
+                 sg.Text('Rotate'),
+                 sg.Input(f'{bdic["angle"]}', key='-angl-', width=4,
+                          background_color='#ffffdd'),
+                 sg.Text(' Front Jit.'),
+                 sg.Input(f'{bdic["fjitter"]}', key='-fjit-', width=4,
+                          background_color='#ffffdd'),
+                 ]
+
+    fgc1, bgc1 = bg_and_font(bdic['bg1'])
+    fgc2, bgc2 = bg_and_font(bdic['bg2'])
+    bginfo = [sg.Combo(bg_grad, default_value=next(iter(bg_grad)),
+                       width=10, key='-grad-', readonly=True),
+              sg.Text(' C1'), sg.Button(bgc1[1:], key='-bg1-', text_color=fgc1,
+                                       background_color=bgc1),
+              sg.Text('C2'), sg.Button(bgc2[1:], key='-bg2-', text_color=fgc2,
+                                       background_color=bgc2),
+              sg.Text(' BG Angle'),
+              sg.Input(f'{bdic["bgangle"]}', key='-incl-', width=4,
+                          background_color='#ffffdd'),
+              sg.Text(' BG Jit.'),
+              sg.Input(f'{bdic["bjitter"]}', key='-bjit-', width=4,
+                       background_color='#ffffdd'),
+              ]
+
+    buttons = [sg.Text(expand_x=True),
+               sg.Button('Cancel', key='-can-', width=6,
+                         background_color='#ffdddd'),
+               sg.Button('Done', key='-ok-', width=6,
+                         background_color='#ddffdd'),
+               ]
+    layout = [tapes,
+              layouting,
+              bginfo,
+              buttons]
+
+    wn = sg.Window('Tyroleantape conf.', layout=layout)
+
+    for i, x in enumerate(tyrolean_preserv['tplist']):
+        wn[f'-tap{i}-'].update(data=tapethumb(x))
+
+    while True:
+        ev, va = wn.read()
+
+        if ev in ('-can-', sg.WINDOW_CLOSED):
+            ev = '-can-'
+            break
+        elif ev.startswith('-tap') and va['event_type'] == 'mousedown':
+            n = safe_int(ev[4])
+            print(n)
+            tyr = collect_parts(n)
+            tplist = tyrolean_preserv['tplist']
+            if tyr is not None:
+                if n < len(tplist):
+                    tplist[n] = tyr
+                    print('old one')
+                else:
+                    tplist.append(tyr)
+                    print('new one')
+                wn[ev].update(data=tapethumb(tyr))
+            else:
+                print('tyr is None')
+            fdi.flush_ev(wn)
+        elif ev.startswith('-bg'):
+            label = ev[1:4]
+            cl = sg.popup_color(ev,rgb_string(bdic[label]),
+                                format='tuple')
+            if cl is None:
+                continue
+            fgc, bgc = bg_and_font(cl)
+            wn[ev].update(bgc[1:], text_color=fgc, background_color=bgc)
+            bdic[label] = cl
+            setattr(p, 'color'+label[-1], RGBColor(cl))
+            fdi.flush_ev(wn)
+            
+
+                
+
+
+    wn.close()
+    if ev == '-can-':
+        tyrolean_preserv['basic'] = dup_b
+        tyrolean_preserv['tplist'] = dup_t
+        revert_p(p)
+        return None
+    
+    
+    
 
 # -----
 # モジュール動作
 # -----
 def generate(p: Param):
 
-    ow, oh = p.width, p.height
-    pat_size = p.pwidth
-    delta = p.pheight
-    density = DENSITY
-    outline = p.pdepth
-    tint = p.color_jitter
-    bright = p.sub_jitter
-    stars = p.sub_jitter2
 
-    w = int(ow + p.pwidth*1.3 + delta*3)
-    h = int(oh + p.pwidth*1.3 + delta*3)
-
-    if sprite_preserv['data'].name == '':
-        sprite_preserv['data'].load_internal()
-
-    sprset = sprite_preserv['data']
-    sprites = sprset.sprites
-    activespr = sprset.enabled
-
-    base = Image.new('RGBA',(w,h),0)
-
-    # -----------------------------
-    # sort large first
-    # -----------------------------
-
-    activespr_sorted = sorted(
-        activespr,
-        key=lambda s: max(sprset.size(s)),
-        reverse=True
-    )
-
-    # -----------------------------
-    # occupancy map (1/4)
-    # -----------------------------
-
-    scale = 4
-    occ_w = w//scale
-    occ_h = h//scale
-
-    occ = np.zeros((occ_h,occ_w),dtype=bool)
-
-    # -----------------------------
-    # circle collision
-    # -----------------------------
-
-    def check_circle(cx,cy,r):
-
-        cx = int(cx/scale)
-        cy = int(cy/scale)
-        r = int(r/scale)
-        
-        x0=max(cx-r,0)
-        x1=min(cx+r+1,occ_w)
-
-        y0=max(cy-r,0)
-        y1=min(cy+r+1,occ_h)
-
-        r2=r*r
-
-        for y in range(y0,y1):
-            dy=y-cy
-            for x in range(x0,x1):
-                dx=x-cx
-                if dx*dx+dy*dy<=r2:
-                    if occ[y,x]:
-                        return True
-
-        return False
-
-
-    def draw_circle(cx,cy,r):
-
-        cx = int(cx/scale)
-        cy = int(cy/scale)
-        r = int(r/scale)
-
-        x0=max(cx-r,0)
-        x1=min(cx+r+1,occ_w)
-
-        y0=max(cy-r,0)
-        y1=min(cy+r+1,occ_h)
-
-        r2=r*r
-
-        for y in range(y0,y1):
-            dy=y-cy
-            for x in range(x0,x1):
-                dx=x-cx
-                if dx*dx+dy*dy<=r2:
-                    occ[y,x]=True
-
-
-    # -----------------------------
-    # average radius (density)
-    # -----------------------------
-
-    radii=[]
-
-    for s in activespr_sorted:
-
-        sw, sh = sprset.size(s)
-
-        size = max(sw,sh)*pat_size
-        r = size/2+delta
-
-        radii.append(r)
-
-    avg_r = sum(radii)/len(radii)
-    avg_area = math.pi*avg_r*avg_r
-
-    target_num = int((ow*oh)*density/avg_area)
-
-    # -----------------------------
-    # placement storage
-    # -----------------------------
-
-    placed = []
-    placed_radius = []
-
-    fail = 0
-    fail_limit = target_num*3
-
-    # -----------------------------
-    # Blue Noise placement
-    # -----------------------------
-
-    while fail < fail_limit:
-
-        ps = random.choice(activespr_sorted)
-
-        sw,sh = sprset.size(ps)
-
-        size = max(sw,sh)*pat_size
-        r = size/2+delta
-
-        # candidate count grows with density
-        candidates = 8+len(placed)//20
-
-        best = None
-        best_score = -1e9
-
-        for _ in range(candidates):
-
-            px = random.uniform(r,w-r)
-            py = random.uniform(r,h-r)
-
-            if check_circle(px,py,r):
-                continue
-
-            if not placed:
-
-                score=1e9
-
-            else:
-
-                score = min(math.hypot(px-x,py-y)-(r+pr)
-                            for (x,y),pr in zip(placed,placed_radius))
-
-            if score > best_score:
-
-                best_score = score
-                best = (px,py)
-
-        if best is None:
-            fail+=1
-            continue
-
-        fail=0
-
-        px,py=best
-
-        draw_circle(px,py,r)
-
-        placed.append((px,py))
-        placed_radius.append(r)
-
-        if sprite_preserv['anglefix'] is None:
-            theta = random.random()*360
-        else:
-            theta = sprite_preserv['anglefix']
-            
-        pat = sps.sprite_pattern(ps, sprite_preserv['data'])
-        ssiz = (int(sw*pat_size), int(sh*pat_size))
-        simg = sps.sprite_image(pat).resize(ssiz, resample=Image.NEAREST)
-
-        p1 = simg.rotate(theta, expand=True, resample=Image.NEAREST)
-
-
-        p1size = (int(px-p1.width/2), int(py-p1.height/2))
-        base.paste(p1, p1size, p1)
-
-    # -----------------------------
-    # crop
-    # -----------------------------
-
-    ofsx=int((w-ow)/2)
-    ofsy=int((h-oh)/2)
-
-    base=base.crop((ofsx,ofsy,ow+ofsx,oh+ofsy))
-
-    if outline > 0:
-        base = outlined(base, outline, p.color3.ctox())
-
-    base=sat_attenate(base,tint)
-    base=bri_attenate(base,bright)
-
-    if p.h_img is None:
-        img = diagonal_gradient_rgb(ow,oh,p.color1,p.color2)
-    else:
-        img = p.bg(ow, oh)
-    
-    if stars > 0:
-        star_img = starfield(ow, oh, pat_size, stars)
-        img.paste(star_img,(0,0),star_img)
-
-    img.paste(base,(0,0),base)
-
-    return img
+    return
 
 # ------------------------------------------------------------------------
 import time
