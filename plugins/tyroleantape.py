@@ -981,8 +981,17 @@ def collect_parts(number):
             cur_ty.palette[n] = cl
             fgc, bgc = bg_and_font(cl)
             wn[ev].update(background_color=bgc)
+        elif ev == '-pld-':
+            newcols = fdi.load_palette('tyrolean.pal', 10)
+            if newcols is None:
+                continue
+            for i, c in enumerate(newcols):
+                if update_palbutton(wn, i, c) is not None:
+                    palette[i] = to_rgb(c)
+            fdi.flush_ev(wn)
         elif ev == '-psv-':
-            # save functions doesn't need refresh preview
+            fdi.save_palette(palette, mode='w')
+            fdi.flush_ev(wn)
             continue
         elif ev == '-tysv-':
             # save functions doesn't need refresh preview
@@ -1102,7 +1111,13 @@ def palparts(palette):
                               key=f'-pal{n}-'))
     pals.append(sg.Text('9', width=1, text_align='left'))
     return pals
-        
+
+def update_palbutton(wn, palno, color):
+    cstr = rgb_string(color)
+    if cstr is None:
+        return None
+    wn[f'-pal{palno}-'].update(background_color=cstr)
+    return cstr
 
 def tapethumb(ty: Tyrolean):
     w0,h0 = TY_THUMB
@@ -1301,6 +1316,7 @@ def desc(p):
               bginfo,
               buttons]
 
+    tplist = tyrolean_preserv['tplist']
     wn = sg.Window('Tyroleantape conf.', layout=layout)
 
     for i, x in enumerate(tyrolean_preserv['tplist']):
@@ -1312,18 +1328,19 @@ def desc(p):
         if ev in ('-can-', sg.WINDOW_CLOSED):
             ev = '-can-'
             break
+        elif ev == '-ok-':
+            break
         elif ev.startswith('-tap') and va['event_type'] == 'mousedown':
             n = safe_int(ev[4])
             print(n)
             tyr = collect_parts(n)
-            tplist = tyrolean_preserv['tplist']
             if tyr is not None:
-                if n < len(tplist):
+                if (len(tplist)-1) > n:
                     tplist[n] = tyr
-                    print('old one')
+                    print(f'old one: #{n}')
                 else:
                     tplist.append(tyr)
-                    print('new one')
+                    print(f'new one: #{n}')
                 wn[ev].update(data=tapethumb(tyr))
             else:
                 print('tyr is None')
@@ -1364,7 +1381,7 @@ def desc(p):
         tyrolean_preserv['tplist'] = dup_t
         revert_p(p)
         return None
-    
+    tyrolean_preserv['tplist'] = tplist
     
     
 
