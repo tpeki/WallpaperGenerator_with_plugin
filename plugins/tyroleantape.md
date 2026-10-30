@@ -9,35 +9,62 @@
 
  ## [methods]
 - set_internal (name=None, pattern_dic=None): 
+    - load_internalで読み込むパターンセットの設定
+
 - load_internal (): 
+    - 内蔵パターンセットを読み込み
+
 - list ():
+    - パターンセットに登録されているパターン名のリスト
+
 - get (label):
+    - パターンの取得
+
 - size (label):
+    - パターンの基本構成サイズ
+
 - image (label, length=None):
-- set_patterns (set_name, pattern_dic):
+    - パターンで画像を生成
+
+- set_patterns (set_name, pattern_dic)
+    - パターンセットを設定:
+
 - merge_patterns (appendic):
-    パターンセット(辞書)をマージ(既存は書き換えない)
-- add_pattern (label, pattern):
+    - パターンセット(辞書)をマージ(既存は書き換えない)
+
+- add_pattern (label, pattern)
+    - パターンセットにパターンを追加:
+
 - pat_to_text (label):
-    1パターン分のテキスト
+    - 1パターン分のテキスト
+
 - patterns_to_text ():
-    パターンセットを文字列にする
+    - パターンセットをセーブ用の文字列にする
+
 - text_to_pat (buf):
-    [パターン名]行から続くパターンテキストを読み込んで辞書レコードに変換
+    - [パターン名]行から続くパターンテキストを読み込んで辞書レコードに変換
+
 - text_to_patterns (buf):
-    テキストからパターンを読み込んでテープセットに登録
+    - テキストからパターンを読み込んでテープセットに登録
+
 - load_file (file_name, directory=None, add_zip=None):
+    - パターンセットをファイルから読み込む
+    - ZIPファイル対応
+    - dir,zipがNoneならデフォルトディレクトリ、デフォルトアーカイブを探索
+
 - save_file (file_name=None, directory=None):
-    return num of saved patterns
+    - パターンセットをファイルに書き出す(ZIP非対応)
+    - return num of saved patterns
+
 
 # class Tyrolean:
 
  ## [Attributes]
 - pattern = copy.deepcopy(pattern)
 - palette = copy.deepcopy(palette)
-- sprites = []   # sprite名のリスト[(sl, sr), ... ]
-- sprdic = {}  # spritesの登場スプライトパターン '{sl}&{sr}': [[sprtext]]
-- imglist = []  # spriteイメージ(重複あり)
+- sprites = []   # sprite名のリスト[(sls, spr), ... ]
+- sprdic = {}  # spritesの登場スプライトパターン '{sls}&{spr}': [[sprtext]]
+- imglist = []  # spriteイメージ(重複あり) renderで生成
 - spr_h = 0
 - height = 0
 - outline = tyrolean_preserv\['basic']\['outline']
@@ -53,20 +80,29 @@
  ## [Initialize]
 
 - \__init__ (pattern, palette=None):
+  - かならずパターンを指定する
+  - パレットは指定されなければ基本パレットを利用
+
 
  ## [Methods]
 - sprite_height (limit=0):
-    limit=0:最大sprite高 n:制限高
+    - limit=0:最大sprite高 n:制限高
 - pattern_size ():
+    - 
 - weave (length, height=None):
-    height=0:sprite_height based, n:limitted_height, None:default
+    - テープイメージを生成する。高さ指定が無ければ、self.heightの設定に従う
+    - height=0:sprite_height based, n:limitted_height, None:default
 - render_sprites(self)
+    - 設定されているスプライトリストのスプライトを画像出力して、self.imglist[]に格納。これをパターン上に順次pasteすることでテープになる。
 - merge_sprdic(self, setname, sdic):
+    - 設定されているスプライト情報を上書き追加
+
 
 
 
 ## サポート関数
 
 - safe_int(s)  # 文字列から整数へ変換
-- ssname(s1,s2)  # s1&s2 を返す ただし、元文字列中の'&'は'%26'に変換
+- ssname(s1,s2)  # s1&s2 を返す ただし、元文字列s1,s2中の'&'は'%26'に変換 (Tyrol内のスプライト辞書で使用)
+- 
 

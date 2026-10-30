@@ -122,20 +122,6 @@ INT_PATTERNS = {
     'rainbow': [[(9,3), (5,3), (9,2), (7,3), (9,2), (4,3), (9,2),(3,3),
                  (9,2), (6,3), (9,3)]
                 ],  # 29px
-    'tiger': [[(4,16)],[(4,14),(9,2)],[(4,12),(9,4)],[(4,10),(9,6)],
-              [(4,8),(9,8)],[(4,6),(9,10)],[(4,4),(9,12)],[(4,2),(9,14)],
-              [(9,16)],[(9,14),(4,2)],[(9,12),(4,4)],[(9,10),(4,6)],
-              [(9,8),(4,8)],[(9,6),(4,10)],[(9,4),(4,12)],[(9,2),(4,14)],
-              ],  # 16px
-    'tiger2': [[(4,16)],[(4,15),(9,1)],[(4,14),(9,2)],[(4,13),(9,3)],
-               [(4,12),(9,4)],[(4,11),(9,5)],[(4,10),(9,6)],[(4,9),(9,7)],
-               [(4,8),(9,8)],[(4,7),(9,9)],[(4,6),(9,10)],[(4,5),(9,11)],
-               [(4,4),(9,12)],[(4,3),(9,13)],[(4,2),(9,14)],[(4,1),(9,15)],
-               [(9,16)],[(9,15),(4,1)],[(9,14),(4,2)],[(9,13),(4,3)],
-               [(9,12),(4,4)],[(9,11),(4,5)],[(9,10),(4,6)],[(9,9),(4,7)],
-               [(9,8),(4,8)],[(9,7),(4,9)],[(9,6),(4,10)],[(9,5),(4,11)],
-               [(9,4),(4,12)],[(9,3),(4,13)],[(9,2),(4,14)],[(9,1),(4,15)],
-               ],  # 16px
     }
 
 # -----
@@ -239,7 +225,9 @@ tyrolean_preserv = {'palette': Palette.copy(),
                               'zoom': ZOOM, 'interval': INTERVAL,
                               'angle': ANGLE, 'bgangle': BGANGLE,
                               'spacing': SPACING, 'margin': MARGIN,
-                              'flip': FLIP, 'twopt': Image.NEAREST, # Image.LANCZOS
+                              'flip': FLIP,
+                              'twopt': Image.NEAREST, # Image.LANCZOS,
+                              'placer':0, 'gradation':0,
                               },
                     'sps': None,
                     'tap': None,
@@ -285,6 +273,7 @@ class Tapes:
             return None
 
     def size(self, label):
+        """テープパターンの基本サイズを取得"""
         return check_pat_size(self.patterns[label])
 
     def image(self, label, length=None):
@@ -410,7 +399,9 @@ class Tapes:
     def load_file(self, file_name, directory=None, add_zip=None):
         pats, desc = load_tape_patterns(file_name, directory, add_zip)
         if len(pats) == 0 or not isinstance(pats, dict):
-            self.__init__(self)
+            self.patterns = {}
+            self.name = ''
+            self.desc = ''
         else:
             self.name = pa.splitext(pa.basename(file_name))[0]
             self.patterns = pats
@@ -469,6 +460,7 @@ class Tyrolean:
             return limit
 
     def pattern_size(self):
+        """テープパターンの基本サイズを取得"""
         return check_pat_size(self.pattern)
     
     def weave(self, length, height=None):
@@ -502,7 +494,7 @@ class Tyrolean:
         swidth = 0
         for x in self.imglist:
             w = int(x.width * (lheight/x.height))
-            x = x.resize((w, lheight), resample=Image.LANCZOS)
+            x = x.resize((w, lheight), resample=self.twopt)
             swidth += w
             spr_img.append(x)
 
@@ -564,121 +556,6 @@ class Tyrolean:
         for x in sdic:
             self.sprdic[ssname(setname,x)] = sdic[x]
         return len(sdic)
-
-
-def safe_int(s):
-    try:
-        r = int(s)
-    except ValueError:
-        r = 0
-    return r
-
-def ssname(s1,s2):
-    def rplemp(s):
-        if not isinstance(s, str):
-            return ''
-        return s.replace('&','%26')
-    
-    return rplemp(s1)+'&'+rplemp(s2)
-
-def load_tape_patterns(file_name, directory=None, add_zip=None):
-    file_name = fdi.sanitize_filename(PRFX+file_name, ext=TAPEXT)
-    path, base = pa.split(file_name)
-    if directory is None or directory == '':
-        directory = DATA_DIR
-
-    source = fdi.read_filez(file_name, add_zip=add_zip)
-    if source is None and path == '':
-        source = fdi.read_filez(directory+pa.sep+file_name, add_zip=add_zip)
-        if source is None:
-            return {}, ''
-
-    set_name = pa.splitext(base)[0]  # 使わないか
-    desc = None
-    pdic = {}
-    ptn = []
-    ptn_name = None
-
-    for line in source:
-        if len(line) == 0 or line[0] == '#':  # 空行、コメント行は飛ばす
-            if desc is None and line[0] == '#':
-                desc = re.sub(r'^#\s*', '', line.strip())
-                # 最初のコメント行をdescとして保存(#と空白,"SET_NAME ="は除外)
-            continue
-        if line[0] == '[':
-            if ptn_name is not None:
-                if len(ptn) > 0:  # 前の定義があった
-                    pdic[ptn_name] = ptn
-                    ptn = []
-                    ptn_name = None
-            m = re.match(r'^\[(.*?)\]', line)
-            if m:
-                ptn_name = m.group(1)
-            continue
-                
-        if ptn_name is None:
-            continue
-        data = str_to_tapecolumn(line)
-        if data is None:
-            continue
-        ptn.append(data)
-
-    if ptn_name is not None:
-        if len(ptn) > 0:  # 前の定義があった
-            pdic[ptn_name] = ptn
-
-    return pdic, desc        
-    
-aznum = re.compile(r'^([A-Za-z]+)(\d+)')
-
-def str_to_tapecolumn(line):
-    array = line.split(',')
-    if len(array) == 0:
-        return None
-    print(line,'\n', array)
-    array = [aznum.match(s).groups() for s in array]
-    data = []
-    for pal, length in array:
-        pal = ord(pal.upper()[0]) - ord('A')
-        length = safe_int(length)
-        if length > 0:
-            data.append((pal, length))
-    return data
-        
-def save_tape_patterns(patterns, file_name, directory=None, desc=None):
-    file_name = fdi.sanitize_filename(PRFX+file_name, ext=TAPEXT)
-    set_name = pa.splitext(pa.basename(file_name))[0]
-    if desc is None or desc == '':
-        desc = set_name
-
-    with open(file_name, mode='w', encoding='sjis') as f:
-        f.write(f'# {desc}\n')
-        
-        for item in patterns:
-            f.write(f'[{item}]\n')
-            buffer = []
-            for line in patterns[item]:
-                buffer.append(tapecolumn_to_str(line))
-            f.write('\n'.join(buffer)+'\n')
-    print(f'{file_name} : wrote {len(patterns.keys())} records')
-    return set_name
-
-def tapecolumn_to_str(line):
-    buf = []
-    oa = ord('a')
-    for d in line:
-        p, l = d
-        buf.append(f'{chr(oa+p)}{l:d}')
-    return ','.join(buf)
-    
-
-def tapfile_list(directory, zfile):
-    """テープセットファイルの取得"""
-    patn = PRFX+directory+pa.sep+'*'+TAPEXT
-    files = [fn.replace(TAPEXT,'') \
-             for fn in fdi.glob_filelistz(patn, add_zip=zfile)]
-    # files.append(INT_SETNAME)  # internalは呼び出し元で追加する
-    return files
 
 
 # module基本情報
@@ -745,6 +622,141 @@ def set_inttap():
     return t
 
 
+# 補助関数
+def safe_int(s):
+    try:
+        r = int(s)
+    except ValueError:
+        r = 0
+    return r
+
+def ssname(s1,s2):
+    def rplemp(s):
+        if not isinstance(s, str):
+            return ''
+        return s.replace('&','%26')
+    
+    return rplemp(s1)+'&'+rplemp(s2)
+
+
+def resize_keep_aspect(image, width=None, height=None, resample=Image.LANCZOS):
+    """アスペクト比を維持したままリサイズ"""
+    ow, oh = image.size
+    if width is None:
+        if height is None:
+            return image
+        scale = height/oh
+    else:
+        if height is not None:
+            scale = min(width / w, height / h)
+        else:
+            scale = width / ow
+    nw, nh = int(w * scale), int(h * scale)
+
+    return image.resize((nw, nh), resample=resample)
+
+
+# Tapesのファイル入出力
+def load_tape_patterns(file_name, directory=None, add_zip=None):
+    file_name = fdi.sanitize_filename(file_name, ext=TAPEXT)
+    path, base = pa.split(file_name)
+    if directory is None or path == '':
+        directory = DATA_DIR
+
+    source = fdi.read_filez(file_name, add_zip=add_zip)
+    if source is None and path == '':
+        source = fdi.read_filez(PRFX+directory+pa.sep+base, add_zip=add_zip)
+        if source is None:
+            return {}, ''
+
+    set_name = pa.splitext(base)[0]  # 使わないか
+    desc = None
+    pdic = {}
+    ptn = []
+    ptn_name = None
+
+    for line in source:
+        if len(line) == 0 or line[0] == '#':  # 空行、コメント行は飛ばす
+            if desc is None and line[0] == '#':
+                desc = re.sub(r'^#\s*', '', line.strip())
+                # 最初のコメント行をdescとして保存(#と空白,"SET_NAME ="は除外)
+            continue
+        if line[0] == '[':
+            if ptn_name is not None:
+                if len(ptn) > 0:  # 前の定義があった
+                    pdic[ptn_name] = ptn
+                    ptn = []
+                    ptn_name = None
+            m = re.match(r'^\[(.*?)\]', line)
+            if m:
+                ptn_name = m.group(1)
+            continue
+                
+        if ptn_name is None:
+            continue
+        data = str_to_tapecolumn(line)
+        if data is None:
+            continue
+        ptn.append(data)
+
+    if ptn_name is not None:
+        if len(ptn) > 0:  # 前の定義があった
+            pdic[ptn_name] = ptn
+
+    return pdic, desc        
+    
+aznum = re.compile(r'^([A-Za-z]+)(\d+)')
+
+def str_to_tapecolumn(line):
+    array = line.split(',')
+    if len(array) == 0:
+        return None
+    # print(line,'\n', array)
+    array = [aznum.match(s).groups() for s in array]
+    data = []
+    for pal, length in array:
+        pal = ord(pal.upper()[0]) - ord('A')
+        length = safe_int(length)
+        if length > 0:
+            data.append((pal, length))
+    return data
+        
+def save_tape_patterns(patterns, file_name, directory=None, desc=None):
+    file_name = fdi.sanitize_filename(PRFX+file_name, ext=TAPEXT)
+    set_name = pa.splitext(pa.basename(file_name))[0]
+    if desc is None or desc == '':
+        desc = set_name
+
+    with open(file_name, mode='w', encoding='sjis') as f:
+        f.write(f'# {desc}\n')
+        
+        for item in patterns:
+            f.write(f'[{item}]\n')
+            buffer = []
+            for line in patterns[item]:
+                buffer.append(tapecolumn_to_str(line))
+            f.write('\n'.join(buffer)+'\n')
+    print(f'{file_name} : wrote {len(patterns.keys())} records')
+    return set_name
+
+def tapecolumn_to_str(line):
+    buf = []
+    oa = ord('a')
+    for d in line:
+        p, l = d
+        buf.append(f'{chr(oa+p)}{l:d}')
+    return ','.join(buf)
+    
+
+def tapfile_list(directory, zfile):
+    """テープセットファイルの取得"""
+    patn = directory+pa.sep+'*'+TAPEXT
+    files = [fn.replace(TAPEXT,'') \
+             for fn in fdi.glob_filelistz(patn, add_zip=zfile)]
+    # files.append(INT_SETNAME)  # internalは呼び出し元で追加する
+    return files
+
+
 # テープパターンの基本サイズを取得
 def check_pat_size(pattern):
     """patternの周期長、テープ幅を取得 -> (W, H)"""
@@ -794,7 +806,7 @@ def tape_image(pattern: list, palette: list, length: int) -> Image.Image:
 
 
 # -----
-# テープ要素を組み合わせる
+# テープ要素を組み合わせる (UI)
 # -----
 def collect_parts(number):
     """number: 0..9 テープ番号
@@ -1219,6 +1231,9 @@ def ribbon_texture(width: int, height: int, weights: (list|None)=None
     return tex.astype(np.float32)
 
 
+# -----
+# tyroleanの各種設定
+# -----
 def desc(p):
     placer = ['Parallel', 'Random']
     bg_grad = ['Vertical', 'Horizontal', 'Diagonal']
@@ -1324,6 +1339,20 @@ def desc(p):
             bdic[label] = cl
             setattr(p, 'color'+label[-1], RGBColor(cl))
             fdi.flush_ev(wn)
+        elif ev == '-plcr-':
+            st = wn[ev].get()
+            try:
+                v = placer.index(st)
+            except ValueError:
+                continue
+            bdic['placer'] = v
+        elif ev == '-grad-':
+            st = wn[ev].get()
+            try:
+                v = bg_grad.index(st)
+            except ValueError:
+                continue
+            bdic['gradation'] = v
             
 
                 
@@ -1348,46 +1377,51 @@ def generate(p: Param):
     return
 
 # ------------------------------------------------------------------------
-import time
-def chk(tape_name=None, fringe=3, gap=3, spr_set=None, spr_name=None):
-    """動作チェック： 完成版では削除"""
-    tapes = tyrolean_preserv['tap']
-    if not isinstance(tapes, Tapes):
-        tapes = Tapes()
-        tapes.load_internal()
+if __name__ == '__main__':
+    import time
 
-    if tape_name is None:
-        tape_name = tyrolean_preserv['tape_name']
-    if tape_name not in tapes.list():
-        tape_name = next(iter(tapes.list()))
+    # 動作確認
+    def chk(tape_name=None, fringe=3, gap=3, spr_set=None, spr_name=None):
+        """動作チェック： 完成版では削除"""
+        tapes = tyrolean_preserv['tap']
+        if not isinstance(tapes, Tapes):
+            tapes = Tapes()
+            tapes.load_internal()
 
-    if spr_set is None:
-        s = tyrolean_preserv['sps']
-    else:
-        s = sps.SpriteSet()
-        s.load_file(spr_set, '..\\samples', ZIPFILE)
-        print(s.list())
-    if spr_name is None:
-        spr_name = s.list()
-    spr_set = s.name
+        if tape_name is None:
+            tape_name = tyrolean_preserv['tape_name']
+        if tape_name not in tapes.list():
+            tape_name = next(iter(tapes.list()))
 
-    ty = Tyrolean(tapes.get(tape_name), Palette)
-    ty.merge_sprdic(spr_set, s.sprites)
+        if spr_set is None:
+            s = tyrolean_preserv['sps']
+        else:
+            s = sps.SpriteSet()
+            s.load_file(spr_set, '..\\samples', ZIPFILE)
+            print(s.list())
+        if spr_name is None:
+            spr_name = s.list()
+        spr_set = s.name
 
-    border = tyrolean_preserv['basic']['outline']
-    ty.outline = border
-    ty.spacing = gap
-    ty.margin = fringe
+        ty = Tyrolean(tapes.get(tape_name), Palette)
+        ty.merge_sprdic(spr_set, s.sprites)
 
-    for spr in spr_name:
-        ty.sprites.append((spr_set,spr))
+        border = tyrolean_preserv['basic']['outline']
+        ty.outline = border
+        ty.spacing = gap
+        ty.margin = fringe
 
-    ty.render_sprites()
+        for spr in spr_name:
+            ty.sprites.append((spr_set,spr))
 
-    ty.weave(1920, 0).show()
+        ty.render_sprites()
+
+        ty.weave(1920, 0).show()
         
 
-if __name__ == '__main__':
+# -----
+# 仮メイン
+# -----
     s = set_intspr()
     tyrolean_preserv['sps'] = s
     t = set_inttap()
