@@ -37,91 +37,94 @@ PALETTE_SIZE = 10
 TAPZIP = 'Tyrolean.zip'
 TAPEXT = '.tap'
 TY_THUMB = (300,60)
+SP_THUMB = (500,60)
 TEXTURE_WEIGHTS = [[0,0,0,0],  # 断面,サテン,織目,ムラ(長手方向)
-                   [0.5, 0.2, 0.3, 1],
-                   [0.6, 0.7, 0.5, 1]
+                   [0.6, 0.4, 0.4, 1],
+                   [1.0, 0.9, 0.6, 1]
                    ]
+PLACER = ['Parallel', 'Random']
+GRADATION = ['Vertical', 'Horizontal', 'Diagonal']
+
 
 if __name__ == '__main__':
     PRFX = '../'
 else:
     PRFX = ''
 
-Palette = [(0x99, 0xdd, 0xdd), (0xec, 0xec, 0xec), (0xdd, 0x99, 0xdd),
-           (0x99, 0xdd, 0x99), (0xee, 0xee, 0x99), (0xdd, 0x99, 0x99),
-           (0x99, 0x99, 0xdd), (0xee, 0xbb, 0x99), (0xbb, 0x99, 0xee),
-           (0x44, 0x44, 0x44)  
-           ]
+Palette = [(0xec, 0xec, 0xec), (0x99, 0xdd, 0xdd), (0xdd, 0x99, 0xdd),
+           (0x99, 0x99, 0xdd), (0xee, 0xee, 0x99), (0x99, 0xdd, 0x99),
+           (0xdd, 0x99, 0x99), (0xee, 0xbb, 0x99), (0xbb, 0x99, 0xee),
+           (0x44, 0x44, 0x44)]
 
 # -----
 # Tape pattern (initial)
 # -----
 INT_TAPESET = '*internal*'
 INT_PATTERNS = {
-    'simple': [[(0,3), (1,3), (0,12), (1,3), (0,3)]
+    'simple': [[(1,3), (0,3), (1,12), (0,3), (1,3)]
                ],  # 24px
-    'flat': [[(2,20)],
+    'flat': [[(1,20)],
              ],
-    'wavy': [[(0,18)],
-             [(0,17),(10,1)],
-             [(0,15),(10,3)],
-             [(0,16),(10,2)],
-             [(0,18)],
-             [(10,1),(0,17)],
-             [(10,2),(0,16)],
-             [(10,2),(0,16)],
-             [(10,1),(0,17)],
-             [(10,1),(0,17)],
+    'wavy': [[(1,18)],
+             [(1,17),(10,1)],
+             [(1,15),(10,3)],
+             [(1,16),(10,2)],
+             [(1,18)],
+             [(10,1),(1,17)],
+             [(10,2),(1,16)],
+             [(10,2),(1,16)],
+             [(10,1),(1,17)],
+             [(10,1),(1,17)],
              ],  # 18px
-    'cross': [[(0,2), (1,2), (0,1), (1,2), (2,1), (1,1), (2,1), (1,2),
-               (0,1), (1,2), (0,2)],
-              [(0,2), (1,3), (0,1), (1,2), (2,1), (1,2), (0,1), (1,3), (0,2)],
-              [(0,2), (1,1), (2,1), (1,2), (0,1), (1,3), (0,1), (1,2),
-               (2,1), (1,1), (0,2)],
-              [(0,2), (2,1), (1,1), (2,1), (1,2), (0,1), (1,1), (0,1),
-               (1,2), (2,1), (1,1), (2,1), (0,2)],
-              [(0,1), (2,1), (1,3), (2,1), (1,2), (0,1), (1,2), (2,1),
-               (1,3), (2,1), (0,1)],
-              [(0,2), (2,1), (1,1), (2,1), (1,2), (0,1), (1,1), (0,1),
-               (1,2), (2,1), (1,1), (2,1), (0,2)],
-              [(0,2), (1,1), (2,1), (1,2), (0,1), (1,3), (0,1), (1,2),
-               (2,1), (1,1), (0,2)],
-              [(0,2), (1,3), (0,1), (1,2), (2,1), (1,2), (0,1), (1,3), (0,2)],
-              [(0,2), (1,2), (0,1), (1,2), (2,1), (1,1), (2,1), (1,2),
-               (0,1), (1,2), (0,2)],
-              [(0,2), (1,1), (0,1), (1,2), (2,1), (1,3), (2,1), (1,2),
-               (0,1), (1,1), (0,2)],
+    'cross': [[(1,2), (0,2), (1,1), (0,2), (2,1), (0,1), (2,1), (0,2),
+               (1,1), (0,2), (1,2)],
+              [(1,2), (0,3), (1,1), (0,2), (2,1), (0,2), (1,1), (0,3), (1,2)],
+              [(1,2), (0,1), (2,1), (0,2), (1,1), (0,3), (1,1), (0,2),
+               (2,1), (0,1), (1,2)],
+              [(1,2), (2,1), (0,1), (2,1), (0,2), (1,1), (0,1), (1,1),
+               (0,2), (2,1), (0,1), (2,1), (1,2)],
+              [(1,1), (2,1), (0,3), (2,1), (0,2), (1,1), (0,2), (2,1),
+               (0,3), (2,1), (1,1)],
+              [(1,2), (2,1), (0,1), (2,1), (0,2), (1,1), (0,1), (1,1),
+               (0,2), (2,1), (0,1), (2,1), (1,2)],
+              [(1,2), (0,1), (2,1), (0,2), (1,1), (0,3), (1,1), (0,2),
+               (2,1), (0,1), (1,2)],
+              [(1,2), (0,3), (1,1), (0,2), (2,1), (0,2), (1,1), (0,3), (1,2)],
+              [(1,2), (0,2), (1,1), (0,2), (2,1), (0,1), (2,1), (0,2),
+               (1,1), (0,2), (1,2)],
+              [(1,2), (0,1), (1,1), (0,2), (2,1), (0,3), (2,1), (0,2),
+               (1,1), (0,1), (1,2)],
               ],  # 17px
-    'zigzag': [[(0,3), (1,2), (5,3), (1,2), (0,3), (1,2)],
-               [(1,1), (0,3), (1,2), (5,3), (1,2), (0,3), (1,1)],
-               [(1,2), (0,3), (1,2), (5,3), (1,2), (0,3)],
-               [(1,1), (0,3), (1,2), (5,3), (1,2), (0,3), (1,1)],
+    'zigzag': [[(1,3), (0,2), (5,3), (0,2), (1,3), (0,2)],
+               [(0,1), (1,3), (0,2), (5,3), (0,2), (1,3), (0,1)],
+               [(0,2), (1,3), (0,2), (5,3), (0,2), (1,3)],
+               [(0,1), (1,3), (0,2), (5,3), (0,2), (1,3), (0,1)],
                ],  # 15px
-    'bubble': [[(0,2),(9,1),(5,5),(9,3),(4,4),(9,1),(0,2)],
-               [(0,2),(9,2),(5,3),(9,3),(4,6),(0,2)],
-               [(0,2),(9,7),(4,8),(0,1)],
-               [(0,2),(9,7),(4,8),(0,1)],
-               [(0,2),(9,6),(6,3),(4,6),(0,1)],
-               [(0,2),(9,4),(6,7),(4,4),(0,1)],
-               [(0,2),(9,3),(6,9),(4,2),(0,2)],
-               [(0,2),(9,2),(6,11),(9,1),(0,2)],
-               [(0,2),(9,2),(6,11),(9,1),(0,2)],
-               [(0,2),(9,1),(6,13),(0,2)],
-               [(0,2),(9,1),(6,13),(0,2)],
-               [(0,2),(9,1),(6,13),(0,2)],
-               [(0,2),(9,2),(6,11),(9,1),(0,2)],
-               [(0,2),(9,2),(6,11),(9,1),(0,2)],
-               [(0,2),(9,2),(5,3),(6,6),(3,2),(9,1),(0,2)],
-               [(0,2),(9,1),(5,5),(6,4),(3,4),(0,2)],
-               [(0,2),(5,7),(6,2),(9,1),(3,4),(0,2)],
-               [(0,1),(5,9),(9,3),(3,2),(9,1),(0,2)],
-               [(0,1),(5,9),(9,6),(0,2)],
-               [(0,1),(5,9),(9,6),(0,2)],
-               [(0,2),(5,7),(9,7),(0,2)],
+    'bubble': [[(1,2),(9,1),(5,5),(9,3),(4,4),(9,1),(1,2)],
+               [(1,2),(9,2),(5,3),(9,3),(4,6),(1,2)],
+               [(1,2),(9,7),(4,8),(1,1)],
+               [(1,2),(9,7),(4,8),(1,1)],
+               [(1,2),(9,6),(6,3),(4,6),(1,1)],
+               [(1,2),(9,4),(6,7),(4,4),(1,1)],
+               [(1,2),(9,3),(6,9),(4,2),(1,2)],
+               [(1,2),(9,2),(6,11),(9,1),(1,2)],
+               [(1,2),(9,2),(6,11),(9,1),(1,2)],
+               [(1,2),(9,1),(6,13),(1,2)],
+               [(1,2),(9,1),(6,13),(1,2)],
+               [(1,2),(9,1),(6,13),(1,2)],
+               [(1,2),(9,2),(6,11),(9,1),(1,2)],
+               [(1,2),(9,2),(6,11),(9,1),(1,2)],
+               [(1,2),(9,2),(5,3),(6,6),(3,2),(9,1),(1,2)],
+               [(1,2),(9,1),(5,5),(6,4),(3,4),(1,2)],
+               [(1,2),(5,7),(6,2),(9,1),(3,4),(1,2)],
+               [(1,1),(5,9),(9,3),(3,2),(9,1),(1,2)],
+               [(1,1),(5,9),(9,6),(1,2)],
+               [(1,1),(5,9),(9,6),(1,2)],
+               [(1,2),(5,7),(9,7),(1,2)],
                ],  # 18px
-    'rainbow': [[(9,3), (5,3), (9,2), (7,3), (9,2), (4,3), (9,2),(3,3),
-                 (9,2), (6,3), (9,3)]
-                ],  # 29px
+    'rainbow': [[(9,3), (2,3), (9,2), (3,3), (9,2), (5,3), (9,2),
+                 (4,3), (9,2), (7,3), (9,2), (6,3), (9,3)]
+                ],  # 34px
     }
 
 # -----
@@ -223,11 +226,10 @@ tyrolean_preserv = {'palette': Palette.copy(),
                               'outline': OLCOLOR,
                               'fjitter': FGJITTER, 'bjitter': BGJITTER,
                               'zoom': ZOOM, 'interval': INTERVAL,
-                              'angle': ANGLE, 'bgangle': BGANGLE,
+                              'angle': ANGLE, 'flip': FLIP,
                               'spacing': SPACING, 'margin': MARGIN,
-                              'flip': FLIP,
                               'twopt': Image.NEAREST, # Image.LANCZOS,
-                              'placer':0, 'gradation':0,
+                              'placer':0, 'bgangle': BGANGLE,
                               },
                     'sps': None,
                     'tap': None,
@@ -244,6 +246,7 @@ class Tapes:
         self.patterns = {}
         self.name = ''
         self.desc = ''
+        self.palette = Palette
         self.internal_set = copy.deepcopy(INT_PATTERNS)
         self.internal_name = INT_TAPESET
 
@@ -397,7 +400,7 @@ class Tapes:
         return set_name, pattern_set
 
     def load_file(self, file_name, directory=None, add_zip=None):
-        pats, desc = load_tape_patterns(file_name, directory, add_zip)
+        pats, desc, pal = load_tape_patterns(file_name, directory, add_zip)
         if len(pats) == 0 or not isinstance(pats, dict):
             self.patterns = {}
             self.name = ''
@@ -406,6 +409,8 @@ class Tapes:
             self.name = pa.splitext(pa.basename(file_name))[0]
             self.patterns = pats
             self.desc = desc
+        if pal is not None:
+            self.palette = pal
 
         return len(self.patterns)  # num of loaded patterns
 
@@ -415,7 +420,8 @@ class Tapes:
                 return 0
             file_name = self.name + TAPEXT
             
-        r = save_tape_patterns(self.patterns, file_name, directory, self.desc)
+        r = save_tape_patterns(self.patterns, file_name, directory,
+                               self.desc, self.palette)
         return r  # num of saved patterns
 
 # -----
@@ -460,19 +466,39 @@ class Tyrolean:
             return limit
 
     def pattern_size(self):
-        """テープパターンの基本サイズを取得"""
+        """テープ地の基本サイズを取得 w,h"""
         return check_pat_size(self.pattern)
+
+    def gross_size(self):
+        """tyの実イメージでの基本単位サイズ w,h"""
+        w,h = self.pattern_size()
+        tmpi = self.weave(w)
+        rh = tmpi.height
+        rw = int(w * rh/h)
+        return rw, rh
+
+    def append_spr(self, spset_name, sprite_name, sppat):
+        self.sprites.append([spset_name, sprite_name])
+        sn = ssname(spset_name, sprite_name)
+        if not sn in self.sprdic:
+            self.sprdic[sn] = sppat
+
+    def pop_spr(self):
+        if len(self.sprites) > 0:
+            dropped = self.sprites.pop()
+            if len(sprites) == 0:
+                self.sprdic = {}
+            return dropped
+        else:
+            return None
     
-    def weave(self, length, height=None):
+    def weave(self, length, height=None, jitter=None):
         """height=0:sprite_height based, n:limitted_height, None:default
             length: > 0"""
-        #margin = self.margin
-        #spacing = self.spacing
-        #twopt = self.twopt
         if height is None:
             height = self.height
 
-        if len(self.imglist) == 0:  # spriteなし
+        if len(self.sprites) == 0:  # spriteなし
             if height != 0:
                 th = check_pat_size(self.pattern) + self.margin*2
                 sr = height / th
@@ -492,11 +518,15 @@ class Tyrolean:
 
         spr_img = []
         swidth = 0
-        for x in self.imglist:
-            w = int(x.width * (lheight/x.height))
-            x = x.resize((w, lheight), resample=self.twopt)
+        for sprite in self.imglist:
+            # orig_w, orig_h = sprite.size
+            # orig_bb = sprite.getbbox()
+            w = int(sprite.width * (lheight/sprite.height))
+            sprite = sprite.resize((w, lheight), resample=self.twopt)
             swidth += w
-            spr_img.append(x)
+            # print(f'size {orig_w},{orig_h} {orig_bb} -> {sprite.size}, {swidth}')
+
+            spr_img.append(sprite)
 
         swidth += len(self.imglist)*self.spacing
         tape_height = lheight + self.margin*2
@@ -515,7 +545,13 @@ class Tyrolean:
         _, th = check_pat_size(self.pattern)
         sr = tape_height / th
 
-        tape_img = tape_image(self.pattern, self.palette, int(length/sr))
+        if jitter:
+            cpalette = self.palette.copy()
+            for i,c in enumerate(cpalette):
+                cpalette[i] = to_rgb(rated_jitter(RGBColor(c), jitter))
+        else:
+            cpalette = self.palette
+        tape_img = tape_image(self.pattern, cpalette, int(length/sr))
         tape_img = tape_img.resize((length, tape_height), self.twopt)
         #print((length, tape_height))
         
@@ -532,7 +568,7 @@ class Tyrolean:
 
         if 0 < self.texture < 3:
             tape_img = add_texture(tape_img, TEXTURE_WEIGHTS[self.texture])
-        self.image = tape_img
+        # self.image = tape_img
         return tape_img
 
     def render_sprites(self):
@@ -541,7 +577,6 @@ class Tyrolean:
         
         ol = self.outline
         otf = ol is not None
-        #print(self.sprites)
         
         if otf:
             imglist = [ss.image_with_border(ssname(sl,sr), ol)\
@@ -549,7 +584,15 @@ class Tyrolean:
         else:
             imglist = [ss.image(ssname(sl,sr)) for sl,sr in self.sprites]
 
-        self.imglist = imglist
+        lheight = self.spr_h
+        for i, sprite in enumerate(imglist):
+            if lheight > 0:
+                nw, nh = sprite.width*lheight/sprite.height, lheight
+                sprite = sprite.resize((nw,nh), self.twopt)
+            x,y,w,h = sprite.getbbox()
+            pw,ph = sprite.size
+            imglist[i] = sprite.crop((0,0,w,ph))
+
         return imglist
 
     def merge_sprdic(self, setname, sdic):
@@ -604,8 +647,6 @@ def revert_p(p):
     p.pheight = bdic['interval'] 
     p.pdepth = bdic['angle']
 
-
-
     
 # 基本スプライトの設定
 def set_intspr(): # -> sps.SpriteSet
@@ -620,6 +661,29 @@ def set_inttap():
     t = Tapes()
     t.load_internal()  # Tapesは内部定義を初期化時に取込済
     return t
+
+
+def set_sample_ty(tap: Tapes, tapename, spset: sps.SpriteSet, sprlist):
+    ty = Tyrolean(tap.get(tapename), tap.palette)
+    spsname = spset.name
+    spr_arrange = []
+    collected = sps.SpriteSet()
+
+    sprdic = {}
+    for name in sprlist:
+        if name in spset.list():
+            spr_arrange.append([spsname, name])
+            sn = ssname(spsname, name)
+            if sn not in collected.list():
+                collected.update_sprite(sn, spset.get(name))
+    ty.sprites = spr_arrange
+    ty.sprdic = collected.sprites
+    
+    thumb, imlist = sprthumb(ty, spr_arrange, collected)
+    ty.imglist = imlist
+                             
+
+    return ty
 
 
 # 補助関数
@@ -674,8 +738,14 @@ def load_tape_patterns(file_name, directory=None, add_zip=None):
     pdic = {}
     ptn = []
     ptn_name = None
+    palette = None
+    skip_count = 0
 
-    for line in source:
+    for lno, line in enumerate(source):
+        if skip_count > 0:
+            skip_count -= 1
+            continue
+        
         if len(line) == 0 or line[0] == '#':  # 空行、コメント行は飛ばす
             if desc is None and line[0] == '#':
                 desc = re.sub(r'^#\s*', '', line.strip())
@@ -694,6 +764,11 @@ def load_tape_patterns(file_name, directory=None, add_zip=None):
                 
         if ptn_name is None:
             continue
+        elif ptn_name.lower() == 'colors':
+            palette, skip_count = read_palette(source, lno)
+            ptn_name = ''
+            continue
+        
         data = str_to_tapecolumn(line)
         if data is None:
             continue
@@ -703,8 +778,41 @@ def load_tape_patterns(file_name, directory=None, add_zip=None):
         if len(ptn) > 0:  # 前の定義があった
             pdic[ptn_name] = ptn
 
-    return pdic, desc        
+    return pdic, desc, palette        
     
+
+def read_palette(buf, lno):
+    skip = 0
+    lbuf = len(buf)
+    palette = [None]*10
+    while True:
+        if len(buf[lno+skip]) > 0:
+            if buf[lno+skip][0] == '[':
+                break
+            else:
+                m = re.match(
+                    r'^Color(?P<no>\d+)=\((?P<r>\d+),(?P<g>\d+),(?P<b>\d+)\)$',
+                    buf[lno+skip])
+                if m:
+                    no = int(m['no'])
+                    r = int(m['r'])
+                    g = int(m['g'])
+                    b = int(m['b'])
+                    if 0 <= no <= 9:
+                        palette[no] = (r,g,b)
+        skip += 1
+        if (lbuf-1) < (lno + skip):
+            break
+    
+    if sum(x is None for x in palette) == 10:
+        return None, skip
+    for i, c in enumerate(palette):
+        if c is None:
+            palette[i] = Palette[i]
+
+    return palette, skip-1
+
+
 aznum = re.compile(r'^([A-Za-z]+)(\d+)')
 
 def str_to_tapecolumn(line):
@@ -721,7 +829,8 @@ def str_to_tapecolumn(line):
             data.append((pal, length))
     return data
         
-def save_tape_patterns(patterns, file_name, directory=None, desc=None):
+def save_tape_patterns(patterns, file_name, directory=None,
+                       desc=None, palette=None):
     file_name = fdi.sanitize_filename(PRFX+file_name, ext=TAPEXT)
     set_name = pa.splitext(pa.basename(file_name))[0]
     if desc is None or desc == '':
@@ -730,6 +839,12 @@ def save_tape_patterns(patterns, file_name, directory=None, desc=None):
     with open(file_name, mode='w', encoding='sjis') as f:
         f.write(f'# {desc}\n')
         
+        if palette is not None:
+            f.write(f'[colors]\n')
+            for i, c in enumerate(palette):
+                r,g,b = to_rgb(c)
+                f.write(f'color{i}=({r},{g},{b})\n')
+
         for item in patterns:
             f.write(f'[{item}]\n')
             buffer = []
@@ -812,20 +927,17 @@ def collect_parts(number):
     """number: 0..9 テープ番号
        テープ要素の組み合わせ編集ダイアログ"""
     tt = len(tyrolean_preserv['tplist'])
-    dsps = tyrolean_preserv['sps'].name
+    spset = tyrolean_preserv['sps']
+    if not isinstance(spset, sps.SpriteSet):
+        spset = set_intspr()
     tapset = tyrolean_preserv['tap']
-    taps = tapset.name
+    if not isinstance(tapset, Tapes):
+        print('NOT TAPESET')
+        tapset = set_inttap()
     tapname = tyrolean_preserv['tape_name']
     bdr = tyrolean_preserv['basic']['margin']
 
-    tpcache = {}
-    tapset = set_inttap()
-    tpcache[INT_TAPESET] = tapset
-    spcache = {}
-    spset = set_intspr()
-    spcache[INT_SETNAME] = spset
     collected = sps.SpriteSet()
-    spr_arrange = []
 
     if number < tt:
         cur_ty = tyrolean_preserv['tplist'][number]
@@ -837,13 +949,16 @@ def collect_parts(number):
         if tapname is None:
             tapname = next(iter(tapset.list()))
         pat = tapset.get(tapname)
-        cur_ty = Tyrolean(pat, Palette)
+        cur_ty = Tyrolean(pat, tapset.palette)
+        spr_arrange = []
         tyrolean_preserv['tplist'].append(cur_ty)
         sprth = Image.new('RGB',(500,60), '#d8d8d8')
     else:
         return None
         
-    print('--- tyrolean created ---')
+    tpcache = {tapset.name: tapset}
+    spcache = {spset.name: spset}
+
     tyimg = tapethumb(cur_ty)
     tex = cur_ty.texture
     top = [sg.Text(f'Tape No. {number}'),
@@ -973,12 +1088,11 @@ def collect_parts(number):
             break
         elif ev.startswith('-pal'):
             n = int(ev[4])
-            cl = sg.popup_color(ev,rgb_string(cur_ty.palette[n]),
-                                format='tuple')
+            cl = sg.popup_color(ev,rgb_string(cur_ty.palette[n]))
             fdi.flush_ev(wn)
             if cl is None:
                 continue
-            cur_ty.palette[n] = cl
+            cur_ty.palette[n] = to_rgb(cl)
             fgc, bgc = bg_and_font(cl)
             wn[ev].update(background_color=bgc)
         elif ev == '-pld-':
@@ -1010,7 +1124,6 @@ def collect_parts(number):
             continue
         elif ev == '-spsl-':
             v = wn[ev].get()
-            print(v, spcache)
             if v in spcache:
                 spset = spcache[v]
             else:
@@ -1026,6 +1139,9 @@ def collect_parts(number):
             if not tapname in tpcache[tpsname].list():
                 continue
             cur_ty.pattern = tpcache[tpsname].get(tapname)
+            cur_ty.palette = tpcache[tpsname].palette
+            for i, c in enumerate(cur_ty.palette):
+                update_palbutton(wn, i, c)
             _,h = cur_ty.pattern_size()
             wn['-theights-'].update(f' Tape {h}')
         elif ev in ('-spadd-', '-sprmv-'):
@@ -1087,7 +1203,7 @@ def collect_parts(number):
 
         tyimg = tapethumb(cur_ty)
         wn['-preview-'].update(data=tyimg)
-        print(ev)
+        #print(ev)
 
     wn.close()
     if ev == '-can-':
@@ -1121,63 +1237,47 @@ def update_palbutton(wn, palno, color):
 
 def tapethumb(ty: Tyrolean):
     w0,h0 = TY_THUMB
+    w, h = ty.weave(w0).size
 
-    tyimg = ty.weave(w0, 0)
-    
-    w,h = tyimg.size
-    if h > h0:
-        tyimg.thumbnail((int(w*h0/h), h0))  # 幅広なら縮小
-        h = h0
-    if tyimg.width > w0:
-        w = w0
+    scale = h0/h
+    length = int(w0/scale)
+    tyimg = ty.weave(length)
+    tyimg = tyimg.resize((w0,h0), resample=True)
 
-    if w < tyimg.width or h < tyimg.height:
-        tyimg = tyimg.crop((w,h))
-
-    if 0 < ty.texture < 3:
-        tyimg = add_texture(tyimg, TEXTURE_WEIGHTS[ty.texture])
+    #if 0 < ty.texture < 3:
+    #    tyimg = add_texture(tyimg, TEXTURE_WEIGHTS[ty.texture])
     return tyimg
 
     
 def sprthumb(ty: Tyrolean, sprites_list, ss: sps.SpriteSet):
-    w0,h0 = 500,60
-    bg = '#d8d8d8'
-    
-    sp = ty.spacing
+    w0,h0 = SP_THUMB
     ol = ty.outline
     otf = ol is not None
+    
+    bg = '#d8d8d8'
     if otf:
         fgc, bgc = bg_and_font(ol)
         if fgc == '#000000':
             bg = '#383838'
         
-    if len(sprites_list) == 0:
+    if len(ty.sprites) == 0:
         return Image.new('RGB', (500,60), bg), []
-    
-    maxheight = max([ss.size(x)[1] for x in ss.list()])
-    sph = maxheight if ty.height == 0 else ty.height - ty.margin*2
 
-    if otf:
-        imlist = [ss.image_with_border(ssname(sl,sr), ol) \
-                  for sl,sr in sprites_list]
-    else:
-        imlist = [ss.image(ssname(sl,sr)) for sl,sr in sprites_list]
+    sph = ty.spr_h
+    ty.spr_h = 0
+    imlist = ty.render_sprites()
+    ty.spr_h = sph
     
+    sp = ty.spacing
     ww = 0
     for x in imlist:
-        if not isinstance(x, Image.Image):
-            continue
         w,h = x.size
         w = int(w*60/h)
         ww += w+sp
 
     base = Image.new('RGB', (ww, 60), bg)
-
-    
     ww = 0
     for x in imlist:
-        if not isinstance(x, Image.Image):
-            continue
         w,h = x.size
         w = int(w*60/h)
         im = x.resize((w,60), resample=Image.NEAREST)
@@ -1250,8 +1350,8 @@ def ribbon_texture(width: int, height: int, weights: (list|None)=None
 # tyroleanの各種設定
 # -----
 def desc(p):
-    placer = ['Parallel', 'Random']
-    bg_grad = ['Vertical', 'Horizontal', 'Diagonal']
+    placer = PLACER
+    bg_grad = GRADATION
     dup_b = copy.deepcopy(tyrolean_preserv['basic'])
     dup_t = copy.deepcopy(tyrolean_preserv['tplist'])
     set_preserv(p)
@@ -1273,8 +1373,10 @@ def desc(p):
     tapes = [sg.Frame('Tape Set', layout=[[sg.Column(layout=left),
                                            sg.Column(layout=right)]])]
     
-    layouting = [sg.Combo(placer, default_value=next(iter(placer)),
-                          width=10, key='-plcr-', readonly=True),
+    layouting = [sg.Text('Placement:'),
+                 sg.Combo(placer, default_value=placer[bdic['placer']],
+                          width=10, key='-plcr-', readonly=True,
+                          enable_events=True),
                  sg.Text('  Zoom'),
                  sg.Input(f'{bdic["zoom"]}', key='-zm-', width=4,
                           background_color='#ffffdd'),
@@ -1291,8 +1393,7 @@ def desc(p):
 
     fgc1, bgc1 = bg_and_font(bdic['bg1'])
     fgc2, bgc2 = bg_and_font(bdic['bg2'])
-    bginfo = [sg.Combo(bg_grad, default_value=next(iter(bg_grad)),
-                       width=10, key='-grad-', readonly=True),
+    bginfo = [sg.Text('Background:'),
               sg.Text(' C1'), sg.Button(bgc1[1:], key='-bg1-', text_color=fgc1,
                                        background_color=bgc1),
               sg.Text('C2'), sg.Button(bgc2[1:], key='-bg2-', text_color=fgc2,
@@ -1316,7 +1417,7 @@ def desc(p):
               bginfo,
               buttons]
 
-    tplist = tyrolean_preserv['tplist']
+    tplist = tyrolean_preserv['tplist'].copy()
     wn = sg.Window('Tyroleantape conf.', layout=layout)
 
     for i, x in enumerate(tyrolean_preserv['tplist']):
@@ -1332,19 +1433,21 @@ def desc(p):
             break
         elif ev.startswith('-tap') and va['event_type'] == 'mousedown':
             n = safe_int(ev[4])
-            print(n)
+            #print(f'tplist length = {len(tplist)}. n = {n}')
+            if n > len(tplist):
+                continue
             tyr = collect_parts(n)
-            if tyr is not None:
-                if (len(tplist)-1) > n:
-                    tplist[n] = tyr
-                    print(f'old one: #{n}')
-                else:
-                    tplist.append(tyr)
-                    print(f'new one: #{n}')
-                wn[ev].update(data=tapethumb(tyr))
-            else:
-                print('tyr is None')
             fdi.flush_ev(wn)
+            if tyr is None:
+                continue
+            if n < len(tplist):
+                #print(f'store tplist {n} len={len(tplist)}')
+                tplist[n] = tyr
+            else:
+                #print(f'append tplist {n} len={len(tplist)}')
+                tplist.append(tyr)
+            img = tapethumb(tyr)
+            wn[ev].update(data=img)
         elif ev.startswith('-bg'):
             label = ev[1:4]
             cl = sg.popup_color(ev,rgb_string(bdic[label]),
@@ -1363,16 +1466,6 @@ def desc(p):
             except ValueError:
                 continue
             bdic['placer'] = v
-        elif ev == '-grad-':
-            st = wn[ev].get()
-            try:
-                v = bg_grad.index(st)
-            except ValueError:
-                continue
-            bdic['gradation'] = v
-            
-
-                
 
 
     wn.close()
@@ -1382,16 +1475,96 @@ def desc(p):
         revert_p(p)
         return None
     tyrolean_preserv['tplist'] = tplist
+    #save_bdic(bdic)  # Global辞書の中身を書き換えているので明示的な保存不要
     
     
-
+def save_bdic(bdic):
+    for key in bdic:
+        tyrolean_preserv['basic'][key] = bdic[key]
+        print(key, bdic[key])
+    
 # -----
 # モジュール動作
 # -----
 def generate(p: Param):
+    ow = p.width
+    oh = p.height
+    set_preserv(p)
+    bdic = tyrolean_preserv['basic']
+    
+    if tyrolean_preserv['sps'] is None:
+        tyrolean_preserv['sps'] = set_intspr()
+    if tyrolean_preserv['tap'] is None:
+        tyrolean_preserv['tap'] = set_inttap()
+    if tyrolean_preserv['tplist'] == []:
+        tapename = next(iter(tyrolean_preserv['tap'].list()))
+        ll = tyrolean_preserv['sps'].list()
+        tyrolean_preserv['tplist'].append(
+            set_sample_ty(tyrolean_preserv['tap'], tapename,
+                          tyrolean_preserv['sps'],
+                          [ll[0], ll[-1]]))  # 先頭と最後のspriteを配置
+
+    #return tyrolean_preserv['tplist'][0].weave(p.width)
+
+    w, h = circums_rect(ow, oh, bdic['angle'])
+    fg = Image.new('RGBA',(w,h), (248,248,248,0))
+
+    zoom = bdic['zoom']
+    fj = bdic['fjitter']
+    tapes = []
+    for tp in tyrolean_preserv['tplist']:
+        img = tp.weave(w//zoom, jitter=fj)
+        img = img.resize((w,zoom*img.height), resample=Image.BICUBIC)
+        tapes.append(img)
+
+    dx = bdic['interval']
+    
+    # まずlayredのみ
+    pos = 0
+    t = 0
+    te = len(tapes)
+    if te == 0:
+        print('empty')
+    while pos < h:
+        fg.paste(tapes[t],(0,pos),tapes[t])
+        pos = pos+tapes[t].height + dx
+        t += 1
+        if t >= te:
+            t = 0
+    # ここまで
+
+    fg = cutout(ow, oh, fg, bdic['bgangle'])
+
+    bw, bh = circums_rect(ow,oh, bdic['bgangle'])
+    bg = horizontal_gradient_rgb(bw,bh, bdic['bg1'], bdic['bg2'])
+    bg = cutout(ow, oh, bg, bdic['bgangle'])
+
+    bg.paste(fg, (0,0), fg)
+
+    return bg
 
 
-    return
+def circums_rect(w,h,angle):
+    rad = np.deg2rad(angle)
+    sang = np.sin(rad)
+    cang = np.cos(rad)
+
+    nw = w*cang + h*sang + 10
+    nh = w*sang + h*cang + 10
+    return int(nw), int(nh)
+
+
+def cutout(w, h, image, angle):
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
+    rimg = image.rotate(angle, resample=Image.BICUBIC,
+                        expand=True, fillcolor='black')
+    ow, oh = rimg.size
+    hw = int((ow-w)/2)+2
+    hh = int((oh-h)/2)+2
+    
+    return rimg.crop((hw,hh, hw+w,hh+h))
+    
 
 # ------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -1430,10 +1603,10 @@ if __name__ == '__main__':
 
         for spr in spr_name:
             ty.sprites.append((spr_set,spr))
+        ty.imglist = ty.render_sprites()
 
-        ty.render_sprites()
-
-        ty.weave(1920, 0).show()
+        jitter = tyrolean_preserv['basic']['fjitter']
+        ty.weave(1920, 0, jitter).show()
         
 
 # -----
@@ -1450,7 +1623,7 @@ if __name__ == '__main__':
     p.width = WIDTH
     p.height = HEIGHT
    
-    #img = generate(p)
-    #img.show()
+    img = generate(p)
+    img.show()
 
-    chk('zigzag', 2)
+    #chk('zigzag', 2)
