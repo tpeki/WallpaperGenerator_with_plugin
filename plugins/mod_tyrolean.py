@@ -1,5 +1,8 @@
 if __name__ == '__main__':
     import _4debug
+    PRFX = '../'
+else:
+    PRFX = ''
 
 from wall_common import *
 import os.path as pa
@@ -7,25 +10,28 @@ import copy
 import TkEasyGUI as sg
 import filedialog as fdi
 import numpy as np
+import configparser
+import ast
 from PIL import Image, ImageFilter, ImageChops, ImageOps
 from plugins import sub_sprites as sps
 
 # --- 定数設定 ---
 WIDTH = 1920
 HEIGHT = 1080
-BGCOLOR1 = (0xc6, 0xc6, 0xc6) # 背景基本色
-BGCOLOR2 = (0xa6, 0xa6, 0xd6) # 背景基本色2
-OLCOLOR = (0, 0, 0x11)   # spriteアウトライン色初期値
-FGJITTER = 30  # テープ色ゆらぎ Palette +/- FGJitter, 
+BGCOLOR1 = (0xee, 0xee, 0xc6) # 背景基本色
+BGCOLOR2 = (0x66, 0x36, 0xd6) # 背景基本色2
+OLCOLOR = (0x66, 0x66, 0x70)   # spriteアウトライン色初期値
+FGJITTER = 4  # テープ色ゆらぎ Palette +/- FGJitter,
+POSJITTER = 100  # 位置ゆらぎ パターン幅に対する％
 BGJITTER = 50  # 背景色ゆらぎ  Gradation(BG1 +/- BGJitter,BG2 +/- BGJitter)
 # 単位面積 = テープ幅×(利用spr幅+spr間隔)+利用spr数
-ZOOM = 4  # multiplier テープ幅倍率
-INTERVAL = 0  # テープ間隔
-ANGLE = 0  # 全体角度 degree
+ZOOM = 2  # multiplier テープ幅倍率
+INTERVAL = 20  # テープ間隔
+ANGLE = 4  # 全体角度 degree
 # sprite配置しない場合は無視
 
 # --- 内部定数設定 ---
-BGANGLE = 0
+BGANGLE = 345
 SPACING = 4  # spr間隔(pix)
 MARGIN = 5  # スプライトの両側に設ける余白：テープ幅=sprite最大高＋border(pix)
 FLIP = 0  # sprite配置時、反転spriteを続けて配置する bit1:up/down bit2:left/right
@@ -43,13 +49,6 @@ TEXTURE_WEIGHTS = [[0,0,0,0],  # 断面,サテン,織目,ムラ(長手方向)
                    [1.0, 0.9, 0.6, 1]
                    ]
 PLACER = ['Parallel', 'Random']
-GRADATION = ['Vertical', 'Horizontal', 'Diagonal']
-
-
-if __name__ == '__main__':
-    PRFX = '../'
-else:
-    PRFX = ''
 
 Palette = [(0xec, 0xec, 0xec), (0x99, 0xdd, 0xdd), (0xdd, 0x99, 0xdd),
            (0x99, 0x99, 0xdd), (0xee, 0xee, 0x99), (0x99, 0xdd, 0x99),
@@ -224,7 +223,8 @@ INT_SPRITES = {
 tyrolean_preserv = {'palette': Palette.copy(),
                     'basic': {'bg1': BGCOLOR1, 'bg2': BGCOLOR2,
                               'outline': OLCOLOR,
-                              'fjitter': FGJITTER, 'bjitter': BGJITTER,
+                              'fjitter': FGJITTER, 'pjitter': POSJITTER,
+                              'bjitter': BGJITTER,
                               'zoom': ZOOM, 'interval': INTERVAL,
                               'angle': ANGLE, 'flip': FLIP,
                               'spacing': SPACING, 'margin': MARGIN,
@@ -246,7 +246,7 @@ class Tapes:
         self.patterns = {}
         self.name = ''
         self.desc = ''
-        self.palette = Palette
+        self.palette = Palette.copy()
         self.internal_set = copy.deepcopy(INT_PATTERNS)
         self.internal_name = INT_TAPESET
 
@@ -474,7 +474,9 @@ class Tyrolean:
         w,h = self.pattern_size()
         tmpi = self.weave(w)
         rh = tmpi.height
-        rw = int(w * rh/h)
+        imglist = self.render_sprites()
+        ww = sum([x.width for x in imglist])
+        rw = int(ww * rh/h)
         return rw, rh
 
     def append_spr(self, spset_name, sprite_name, sppat):
@@ -500,12 +502,13 @@ class Tyrolean:
 
         if len(self.sprites) == 0:  # spriteなし
             if height != 0:
-                th = check_pat_size(self.pattern) + self.margin*2
+                _, th = check_pat_size(self.pattern)
+                th += self.margin*2
                 sr = height / th
                 tape_img = tape_image(self.pattern, self.palette,
                                       int(length/sr))
                 
-                tape_img = tape_img.resize((length, th), twopt)
+                tape_img = tape_img.resize((length, height), self.twopt)
             else:
                 tape_img = tape_image(self.pattern, self.palette, length)
             return tape_img
@@ -553,8 +556,7 @@ class Tyrolean:
             cpalette = self.palette
         tape_img = tape_image(self.pattern, cpalette, int(length/sr))
         tape_img = tape_img.resize((length, tape_height), self.twopt)
-        #print((length, tape_height))
-        
+
         pos = 0
         while True:
             if pos > length:
@@ -601,12 +603,121 @@ class Tyrolean:
         return len(sdic)
 
 
+    def save_tape(self, file_name, directory=None):
+        """TyroleanインスタンスをINI形式で保存"""
+
+        dn, fn = pa.split(file_name)
+        if directory is None:
+            if dn == '':
+                directory = PRFX+DATA_DIR
+            else:
+                directory = dn
+        path = pa.join(directory, fn)
+
+        conf = configparser.ConfigParser(
+            interpolation=None
+        )
+        conf.optionxform = str  # キーの大文字小文字を保持
+
+        conf['Tyrolean'] = {
+            'pattern': repr(self.pattern),
+            'sprites': repr(self.sprites),
+            'sprdic': repr(self.sprdic),
+            'spr_h': str(self.spr_h),
+            'height': str(self.height),
+            'outline': repr(self.outline),
+            'margin': str(self.margin),
+            'spacing': str(self.spacing),
+            'flip': str(self.flip),
+            'twopt': str(int(self.twopt)),
+            'texture': str(self.texture),
+        }
+
+        conf['Colors'] = {
+            f'Color{i}': f'({r},{g},{b})'
+            for i, (r, g, b) in enumerate(self.palette)
+        }
+
+        with open(path, 'w', encoding='utf-8') as f:
+            conf.write(f, space_around_delimiters=False)
+
+        return path
+
+
+    def load_tape(self, file_name, directory=None):
+        """INI形式のファイルからTyroleanインスタンスを復元"""
+
+        dn, fn = pa.split(file_name)
+        if directory is None:
+            if dn == '':
+                directory = PRFX+DATA_DIR
+            else:
+                directory = dn
+
+        path = pa.join(directory, fn)
+
+        conf = configparser.ConfigParser(interpolation=None)
+        conf.optionxform = str
+        if not conf.read(path, encoding='utf-8'):
+            #raise FileNotFoundError(path)
+            return None
+
+        data = conf['Tyrolean']
+
+        # リテラルデータの復元
+        pattern = ast.literal_eval(data['pattern'])
+        sprites = ast.literal_eval(data['sprites'])
+        sprdic = ast.literal_eval(data['sprdic'])
+        outline = ast.literal_eval(data['outline'])
+
+        palette = []
+        colors = conf['Colors']
+        i = 0
+        while f'Color{i}' in colors:
+            palette.append(ast.literal_eval(colors[f'Color{i}']))
+            i += 1
+        
+        # 保存した属性を復元
+        self.pattern = pattern
+        self.palette = palette
+        tw = 0
+        for col in self.pattern:
+            cw = sum([y for x,y in col])
+            tw = max(tw, cw)
+        self.p_height = tw  # パターンの最大幅
+        self.p_width = len(self.pattern)  # テープの最小繰り返し幅
+
+        self.sprites = sprites
+        self.sprdic = sprdic
+        self.spr_h = int(data['spr_h'])
+        self.height = int(data['height'])
+        self.outline = outline
+        self.margin = int(data['margin'])
+        self.spacing = int(data['spacing'])
+        self.flip = int(data['flip'])
+
+        # Pillowのリサンプリング方式
+        resampling = {
+            int(Image.NEAREST): Image.NEAREST,
+            int(Image.LANCZOS): Image.LANCZOS,
+        }
+        self.twopt = resampling.get(int(data['twopt']), Image.LANCZOS)
+
+        self.texture = int(data['texture'])
+
+        # imglistは保存せず、スプライトから再生成
+        self.imglist = self.render_sprites() if self.sprites else []
+
+        return self
+
+
 # module基本情報
 def intro(modlist: Modules, module_name):
     modlist.add_module(module_name, 'チロリアンテープ',
                        {'color1':'背景色1', 'color2':'背景色2',
                         'color3':'縁取り色',
-                        'color_jitter':'前景揺らぎ', 'sub_jitter':'背景揺らぎ',
+                        'color_jitter':'前景色変化', 'sub_jitter':'位置ゆらぎ',
+                        'sub_jitter2':'背景色変化',
                         'pwidth':'ズーム率', 'pheight':'テープ間隔',
                         'pdepth':'角度'})
     return module_name
@@ -618,7 +729,8 @@ def default_param(p: Param):
     p.color2.itoc(*BGCOLOR2)
     p.color3.itoc(*OLCOLOR)
     p.color_jitter = FGJITTER
-    p.sub_jitter = BGJITTER
+    p.sub_jitter = POSJITTER
+    p.sub_jitter2 = BGJITTER
     p.pwidth = ZOOM
     p.pheight = INTERVAL
     p.pdepth = ANGLE
@@ -631,7 +743,8 @@ def set_preserv(p):
     bdic['bg2'] = p.color2.ctoi()
     bdic['outline'] = p.color3.ctoi()
     bdic['fjitter'] = p.color_jitter
-    bdic['bjitter'] = p.sub_jitter
+    bdic['pjitter'] = p.sub_jitter
+    bdic['bjitter'] = p.sub_jitter2
     bdic['zoom'] = p.pwidth
     bdic['interval'] = p.pheight
     bdic['angle'] = p.pdepth
@@ -642,7 +755,8 @@ def revert_p(p):
     p.color2 = RGBColor(bdic['bg2'])
     p.color3 = RGBColor(bdic['outline'])
     p.color_jitter = bdic['fjitter'] 
-    p.sub_jitter = bdic['bjitter']
+    p.sub_jitter = bdic['pjitter']
+    p.sub_jitter2 = bdic['bjitter']
     p.pwidth = bdic['zoom'] 
     p.pheight = bdic['interval'] 
     p.pdepth = bdic['angle']
@@ -678,10 +792,10 @@ def set_sample_ty(tap: Tapes, tapename, spset: sps.SpriteSet, sprlist):
                 collected.update_sprite(sn, spset.get(name))
     ty.sprites = spr_arrange
     ty.sprdic = collected.sprites
+    ty.flip = 1
     
     thumb, imlist = sprthumb(ty, spr_arrange, collected)
     ty.imglist = imlist
-                             
 
     return ty
 
@@ -923,10 +1037,13 @@ def tape_image(pattern: list, palette: list, length: int) -> Image.Image:
 # -----
 # テープ要素を組み合わせる (UI)
 # -----
-def collect_parts(number):
-    """number: 0..9 テープ番号
+def collect_parts(number, tplist=None):
+    """number: 0..9 テープ番号  tplist:テープリスト
        テープ要素の組み合わせ編集ダイアログ"""
-    tt = len(tyrolean_preserv['tplist'])
+    if tplist is None:
+        tplist = tyrolean_preserv['tplist']
+    tt = len(tplist)
+    
     spset = tyrolean_preserv['sps']
     if not isinstance(spset, sps.SpriteSet):
         spset = set_intspr()
@@ -935,23 +1052,21 @@ def collect_parts(number):
         print('NOT TAPESET')
         tapset = set_inttap()
     tapname = tyrolean_preserv['tape_name']
-    bdr = tyrolean_preserv['basic']['margin']
-
     collected = sps.SpriteSet()
 
-    if number < tt:
-        cur_ty = tyrolean_preserv['tplist'][number]
+    if number < tt:  # 既存
+        cur_ty = copy.deepcopy(tplist[number])
         spr_arrange = cur_ty.sprites.copy()
         collected.sprites = cur_ty.sprdic.copy()
         sprth, imglist = sprthumb(cur_ty, spr_arrange, collected)
         cur_ty.imglist = imglist
-    elif number == tt:
+    elif number == tt:  # 新規
         if tapname is None:
             tapname = next(iter(tapset.list()))
         pat = tapset.get(tapname)
         cur_ty = Tyrolean(pat, tapset.palette)
         spr_arrange = []
-        tyrolean_preserv['tplist'].append(cur_ty)
+        # tyrolean_preserv['tplist'].append(cur_ty)
         sprth = Image.new('RGB',(500,60), '#d8d8d8')
     else:
         return None
@@ -1108,8 +1223,22 @@ def collect_parts(number):
             fdi.flush_ev(wn)
             continue
         elif ev == '-tysv-':
-            # save functions doesn't need refresh preview
+            fname = fdi.get_savefile('tyrolean.tyr',
+                                     filetypes=[('TyroleanTape','*.tyr'),],
+                                     init_dir=PRFX+DATA_DIR)
+            if fname != '':
+                cur_ty.save_tape(fname)
             continue
+        elif ev == '-tyld-':
+            fname = fdi.get_openfile('tyrolean.tyr',
+                                     filetypes=[('TyroleanTape','*.tyr'),],
+                                     init_dir=PRFX+DATA_DIR)
+            if fname != '':
+                v = cur_ty.load_tape(fname)
+                if v is None:
+                    continue
+                ev = '-ok-'
+                break
         elif ev == '-tpsl-':
             v = wn[ev].get()
             if v in tpcache:
@@ -1139,7 +1268,8 @@ def collect_parts(number):
             if not tapname in tpcache[tpsname].list():
                 continue
             cur_ty.pattern = tpcache[tpsname].get(tapname)
-            cur_ty.palette = tpcache[tpsname].palette
+            cur_ty.palette = copy.deepcopy(tpcache[tpsname].palette)
+            palette = cur_ty.palette
             for i, c in enumerate(cur_ty.palette):
                 update_palbutton(wn, i, c)
             _,h = cur_ty.pattern_size()
@@ -1183,27 +1313,29 @@ def collect_parts(number):
                            else Image.NEAREST
         elif ev == '-tst-':
             fh = safe_int(wn['-fheight-'].get())
-            if fh > 0:
-                cur_ty.height = fh
+            cur_ty.height = max(0, fh)
             spc = safe_int(wn['-cspc-'].get())
-            if spc > 0:
-                cur_ty.spacing = spc
+            cur_ty.spacing = max(-1, spc)
             mgn = safe_int(wn['-cbdr-'].get())
-            if mgn > 0:
-                cur_ty.margin = mgn
+            cur_ty.margin = max(0, mgn)
         elif ev == '-ftex-':
             v = safe_int(wn[ev].get())
             cur_ty.texture = v
 
         cur_ty.sprites = spr_arrange
         cur_ty.sprdic = collected.sprites
+        
         sprth, imglist = sprthumb(cur_ty, spr_arrange, collected)
         cur_ty.imglist = imglist
         wn['-ssprvw-'].update(data=sprth)
 
         tyimg = tapethumb(cur_ty)
         wn['-preview-'].update(data=tyimg)
-        #print(ev)
+
+    if ev != '-can-':
+        cur_ty.margin = max(0, safe_int(wn['-cbdr-'].get()))
+        cur_ty.spacing = max(-1, safe_int(wn['-cspc-'].get()))
+        cur_ty.height = max(0, safe_int(wn['-fheight-'].get()))
 
     wn.close()
     if ev == '-can-':
@@ -1237,11 +1369,11 @@ def update_palbutton(wn, palno, color):
 
 def tapethumb(ty: Tyrolean):
     w0,h0 = TY_THUMB
-    w, h = ty.weave(w0).size
+    w, h = ty.weave(w0, height=0).size
 
     scale = h0/h
     length = int(w0/scale)
-    tyimg = ty.weave(length)
+    tyimg = ty.weave(length, height=0)
     tyimg = tyimg.resize((w0,h0), resample=True)
 
     #if 0 < ty.texture < 3:
@@ -1351,7 +1483,6 @@ def ribbon_texture(width: int, height: int, weights: (list|None)=None
 # -----
 def desc(p):
     placer = PLACER
-    bg_grad = GRADATION
     dup_b = copy.deepcopy(tyrolean_preserv['basic'])
     dup_t = copy.deepcopy(tyrolean_preserv['tplist'])
     set_preserv(p)
@@ -1383,11 +1514,14 @@ def desc(p):
                  sg.Text('Interval'),
                  sg.Input(f'{bdic["interval"]}', key='-itvl-', width=4,
                           background_color='#ffffdd'),
-                 sg.Text('Rotate'),
+                 sg.Text('Angle'),
                  sg.Input(f'{bdic["angle"]}', key='-angl-', width=4,
                           background_color='#ffffdd'),
-                 sg.Text(' Front Jit.'),
+                 sg.Text(' Color Jit.'),
                  sg.Input(f'{bdic["fjitter"]}', key='-fjit-', width=4,
+                          background_color='#ffffdd'),
+                 sg.Text(' Shift'),
+                 sg.Input(f'{bdic["pjitter"]}', key='-pjit-', width=4,
                           background_color='#ffffdd'),
                  ]
 
@@ -1436,7 +1570,7 @@ def desc(p):
             #print(f'tplist length = {len(tplist)}. n = {n}')
             if n > len(tplist):
                 continue
-            tyr = collect_parts(n)
+            tyr = collect_parts(n, tplist)
             fdi.flush_ev(wn)
             if tyr is None:
                 continue
@@ -1475,7 +1609,17 @@ def desc(p):
         revert_p(p)
         return None
     tyrolean_preserv['tplist'] = tplist
+    bdic['zoom'] = max(1, safe_int(wn['-zm-'].get()))
+    bdic['interval'] = safe_int(wn['-itvl-'].get())
+    bdic['angle'] = safe_int(wn['-angl-'].get())%360
+    bdic['fjitter'] = safe_int(wn['-fjit-'].get())
+    bdic['pjitter'] = min(max(0,safe_int(wn['-pjit-'].get())),100)
+    bdic['bgangle'] = safe_int(wn['-incl-'].get())%360
+    bdic['bjitter'] = safe_int(wn['-bjit-'].get())
+    revert_p(p)
     #save_bdic(bdic)  # Global辞書の中身を書き換えているので明示的な保存不要
+
+    return generate(p)
     
     
 def save_bdic(bdic):
@@ -1502,7 +1646,7 @@ def generate(p: Param):
         tyrolean_preserv['tplist'].append(
             set_sample_ty(tyrolean_preserv['tap'], tapename,
                           tyrolean_preserv['sps'],
-                          [ll[0], ll[-1]]))  # 先頭と最後のspriteを配置
+                          [ll[0], ll[1], ll[-1]]))  # 先頭と最後のspriteを配置
 
     #return tyrolean_preserv['tplist'][0].weave(p.width)
 
@@ -1511,11 +1655,15 @@ def generate(p: Param):
 
     zoom = bdic['zoom']
     fj = bdic['fjitter']
-    tapes = []
-    for tp in tyrolean_preserv['tplist']:
-        img = tp.weave(w//zoom, jitter=fj)
-        img = img.resize((w,zoom*img.height), resample=Image.BICUBIC)
-        tapes.append(img)
+    pj = bdic['pjitter']
+    tapes = tyrolean_preserv['tplist']
+    tapesize = []
+    for tp in tapes:
+        uw, uh = tp.gross_size()
+        if uw == 0:
+            uw, _ = tp.pattern_size()
+        size = (w//zoom, int(uw*pj/100), zoom*uh)
+        tapesize.append(size)
 
     dx = bdic['interval']
     
@@ -1523,20 +1671,27 @@ def generate(p: Param):
     pos = 0
     t = 0
     te = len(tapes)
-    if te == 0:
-        print('empty')
+
     while pos < h:
-        fg.paste(tapes[t],(0,pos),tapes[t])
-        pos = pos+tapes[t].height + dx
+        tp = tapes[t]
+        tw, uw, th = tapesize[t]
+        img = tp.weave(tw+uw, jitter=fj)
+        dif = 0 if uw < 1 else np.random.randint(uw)
+        img = img.crop((dif, 0, tw+dif-1, img.height))
+        img = img.resize((w,th), resample=Image.BICUBIC)
+
+        fg.paste(img, (0,pos), img)
+        pos += img.height + dx
         t += 1
         if t >= te:
             t = 0
     # ここまで
 
-    fg = cutout(ow, oh, fg, bdic['bgangle'])
+    fg = cutout(ow, oh, fg, bdic['angle'])
+    
 
     bw, bh = circums_rect(ow,oh, bdic['bgangle'])
-    bg = horizontal_gradient_rgb(bw,bh, bdic['bg1'], bdic['bg2'])
+    bg = vertical_gradient_rgb(bw, bh, bdic['bg1'], bdic['bg2'])
     bg = cutout(ow, oh, bg, bdic['bgangle'])
 
     bg.paste(fg, (0,0), fg)
@@ -1545,12 +1700,13 @@ def generate(p: Param):
 
 
 def circums_rect(w,h,angle):
-    rad = np.deg2rad(angle)
-    sang = np.sin(rad)
-    cang = np.cos(rad)
+    rad = -np.deg2rad(angle)
+    sang = abs(np.sin(rad))
+    cang = abs(np.cos(rad))
 
-    nw = w*cang + h*sang + 10
-    nh = w*sang + h*cang + 10
+    nw = (w*cang + h*sang)*1.1
+    nh = (w*sang + h*cang)*1.1
+
     return int(nw), int(nh)
 
 
