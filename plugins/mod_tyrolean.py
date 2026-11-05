@@ -1667,25 +1667,69 @@ def generate(p: Param):
 
     dx = bdic['interval']
     
-    # まずlayredのみ
-    pos = 0
-    t = 0
+    # -----------------------------
+    # Tape placement
+    # -----------------------------
+    dx = bdic['interval']
     te = len(tapes)
 
-    while pos < h:
-        tp = tapes[t]
-        tw, uw, th = tapesize[t]
-        img = tp.weave(tw+uw, jitter=fj)
-        dif = 0 if uw < 1 else np.random.randint(uw)
-        img = img.crop((dif, 0, tw+dif-1, img.height))
-        img = img.resize((w,th), resample=Image.BICUBIC)
+    if bdic['placer'] == 0:  # Parallel (従来のlayerd)
+        pos = 0
+        t = 0
+        while pos < h:
+            tp = tapes[t]
+            tw, uw, th = tapesize[t]
 
-        fg.paste(img, (0,pos), img)
-        pos += img.height + dx
-        t += 1
-        if t >= te:
-            t = 0
-    # ここまで
+            img = tp.weave(tw+uw, jitter=fj)
+            dif = 0 if uw < 1 else np.random.randint(uw)
+            img = img.crop((dif, 0, tw+dif-1, img.height))
+            img = img.resize((w,th), resample=Image.BICUBIC)
+
+            fg.paste(img, (0,pos), img)
+            pos += img.height + dx
+
+            t = (t+1) % te
+            
+    else:  # Random
+        # tplist[0] のテープ幅を基準に配置本数を決定
+        tape_width = tapesize[0][2]
+        num = int(np.ceil(h / (tape_width + dx)))
+
+        cx = w / 2
+        cy = h / 2
+
+        for i in range(num):
+            tp = tapes[i % te]
+            tw, uw, th = tapesize[i % te]
+
+            angle = np.random.uniform(0, np.pi)
+            ca = abs(np.cos(angle))
+            sa = abs(np.sin(angle))
+
+            half_len = (w * ca + h * sa) / 2
+            half_offset = (w * sa + h * ca) / 2
+            offset = np.random.uniform(-half_offset, half_offset)
+
+            # テープ中心位置
+            px = cx - sa * offset
+            py = cy + ca * offset
+            length = int(2 * (half_len + max(w, h)))
+
+            img = tp.weave(length, height=th, jitter=fj).convert('RGBA')
+
+            img = img.rotate(
+                -np.degrees(angle),
+                resample=Image.BICUBIC,
+                expand=True,
+                fillcolor=(0, 0, 0, 0)
+            )
+
+            # 中心位置を合わせて配置
+            x = int(px - img.width / 2)
+            y = int(py - img.height / 2)
+
+            fg.paste(img, (x, y), img)
+            
 
     fg = cutout(ow, oh, fg, bdic['angle'])
     
