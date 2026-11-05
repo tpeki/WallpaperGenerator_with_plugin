@@ -1689,10 +1689,12 @@ def generate(p: Param):
 
     fg = cutout(ow, oh, fg, bdic['angle'])
     
-
-    bw, bh = circums_rect(ow,oh, bdic['bgangle'])
-    bg = vertical_gradient_rgb(bw, bh, bdic['bg1'], bdic['bg2'])
-    bg = cutout(ow, oh, bg, bdic['bgangle'])
+    if p.h_img is None:
+        bw, bh = circums_rect(ow,oh, bdic['bgangle'])
+        bg = vertical_gradient_rgb(bw, bh, bdic['bg1'], bdic['bg2'])
+        bg = cutout(ow, oh, bg, bdic['bgangle'])
+    else:
+        bg = p.bg(ow, oh)
 
     bg.paste(fg, (0,0), fg)
 
